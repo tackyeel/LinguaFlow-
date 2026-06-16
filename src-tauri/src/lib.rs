@@ -1,5 +1,7 @@
+mod ai;
 mod clipboard;
 mod config;
+mod history;
 mod hotkey;
 mod server;
 mod tray;
@@ -14,6 +16,11 @@ pub fn run() {
       config::save_config,
       config::complete_setup,
       config::config_file_path,
+      ai::test_ai_provider,
+      ai::ai_translate,
+      ai::ai_reply,
+      history::get_history,
+      history::append_history,
       window::show_window,
       window::hide_window,
       window::quit_app
@@ -22,7 +29,8 @@ pub fn run() {
       config::ensure_config(app.handle())
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
       tray::create_tray(app)?;
-      server::start_health_server(app.handle().clone());
+      server::start_health_server(app.handle().clone())
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
       window::apply_startup_visibility(app.handle())
         .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
       Ok(())

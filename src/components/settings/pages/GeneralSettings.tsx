@@ -1,4 +1,4 @@
-import { Network, Palette, Power, Radio } from "lucide-react";
+import { Palette, Power, Radio } from "lucide-react";
 import { Field, Section, SelectInput, Switch, TextInput } from "../../ui/Form";
 import { useConfigStore } from "../../../stores/configStore";
 import type { ProxyProtocol, ThemeName } from "../../../types/config";
@@ -21,7 +21,7 @@ export function GeneralSettings() {
         </Field>
       </Section>
 
-      <Section title="外观" description="深色主题为默认主题；透明效果在第一阶段先保存配置并预留系统效果接入。">
+      <Section title="外观" description="深色主题为默认主题；透明效果暂时保存配置并预留系统效果接入。">
         <Field label="主题">
           <SelectInput
             value={config.theme}
@@ -50,7 +50,7 @@ export function GeneralSettings() {
         </Field>
       </Section>
 
-      <Section title="监听" description="端口用于本地 HTTP 服务，剪贴板监听用于复制后弹出翻译窗口。">
+      <Section title="监听" description="本地 HTTP 服务会优先使用配置端口；端口被占用时自动尝试后续端口。">
         <Field label="剪贴板监听">
           <Switch
             checked={config.clipboardListen}
@@ -76,6 +76,12 @@ export function GeneralSettings() {
             }
           />
         </Field>
+        <Field label="配置端口" description="写入 config.json 的 listenPort。">
+          <TextInput value={config.listenPort} readOnly />
+        </Field>
+        <Field label="当前实际监听端口" description="成功监听后写回 runtimePort。">
+          <TextInput value={config.runtimePort ?? "尚未启动本地服务"} readOnly />
+        </Field>
         <Field label="忽略过短文本">
           <TextInput
             type="number"
@@ -90,7 +96,7 @@ export function GeneralSettings() {
         </Field>
       </Section>
 
-      <Section title="网络代理" description="代理配置会被 AI 服务、翻译服务和后续 OCR 插件复用。">
+      <Section title="网络代理" description="代理配置会被 AI 服务和后续 OCR 插件复用。">
         <Field label="启用网络代理">
           <Switch
             checked={config.proxy.enabled}

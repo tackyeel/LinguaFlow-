@@ -1,7 +1,8 @@
-import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
-import { Copy, Download, Heart, Search, Trash2 } from "lucide-react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
+import { Copy, Download, Heart, RefreshCw, Search, Trash2 } from "lucide-react";
 import { demoHistory } from "../../../constants/defaultConfig";
 import type { HistoryEntry, HistoryType } from "../../../types/config";
+import { getHistoryEntries } from "../../../utils/history";
 import { Button } from "../../ui/Button";
 import { Field, Section, SelectInput, TextInput } from "../../ui/Form";
 import { PageHeader } from "./GeneralSettings";
@@ -9,17 +10,37 @@ import { PageHeader } from "./GeneralSettings";
 type HistoryFilter = "all" | HistoryType;
 
 export function HistoryPage() {
-  const [entries, setEntries] = useState<HistoryEntry[]>(demoHistory);
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<HistoryFilter>("all");
   const [language, setLanguage] = useState("all");
   const [service, setService] = useState("all");
   const [date, setDate] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadHistory = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const history = await getHistoryEntries();
+      setEntries(history.length ? history : demoHistory);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setEntries(demoHistory);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadHistory();
+  }, []);
 
   const filteredEntries = useMemo(
     () =>
       entries.filter((entry) => {
-        const haystack = `${entry.sourceText} ${entry.resultText}`.toLowerCase();
+        const haystack = `${entry.sourceText} ${entry.resultText} ${entry.contextText ?? ""}`.toLowerCase();
         const matchesQuery = !query || haystack.includes(query.toLowerCase());
         const matchesType = type === "all" || entry.type === type;
         const matchesLanguage =
@@ -46,7 +67,7 @@ export function HistoryPage() {
 
   return (
     <>
-      <PageHeader title="历史记录" description="第一阶段使用本地假数据结构，字段已按 SQLite 后续落库预留。" />
+      <PageHeader title="历史记录" description="AI 翻译和 AI 代回成功后会写入本地 history.json；SQLite 已预留。" />
       <Section title="筛选">
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="搜索" alignTop>
@@ -60,7 +81,9 @@ export function HistoryPage() {
               <option value="all">全部</option>
               <option value="translation">翻译</option>
               <option value="ocr">OCR</option>
-              <option value="aiReply">AI 回复</option>
+              <option value="aiReply">AI 回复旧格式</option>
+              <option value="ai_translate">AI 翻译</option>
+              <option value="ai_reply">AI 代回</option>
             </SelectInput>
           </Field>
           <Field label="语言筛选">
@@ -87,14 +110,18 @@ export function HistoryPage() {
             <TextInput type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </Field>
           <div className="flex flex-wrap items-center justify-end gap-2 rounded-md border border-line/10 bg-panel2/50 p-3">
+            <Button icon={<RefreshCw size={16} />} disabled={loading} onClick={() => void loadHistory()}>
+              刷新
+            </Button>
             <Button icon={<Download size={16} />} onClick={exportJson}>
               导出 JSON
             </Button>
             <Button variant="danger" icon={<Trash2 size={16} />} onClick={() => setEntries([])}>
-              清空历史
+              清空视图
             </Button>
           </div>
         </div>
+        {error ? <div className="rounded-md border border-danger/30 bg-danger/10 p-3 text-sm text-danger">{error}</div> : null}
       </Section>
 
       <Section title="记录">
@@ -102,7 +129,9 @@ export function HistoryPage() {
           {filteredEntries.map((entry) => (
             <HistoryCard key={entry.id} entry={entry} setEntries={setEntries} />
           ))}
-          {filteredEntries.length === 0 ? <div className="rounded-md bg-panel2/50 p-6 text-center text-sm text-muted">没有匹配记录</div> : null}
+          {filteredEntries.length === 0 ? (
+            <div className="rounded-md bg-panel2/50 p-6 text-center text-sm text-muted">没有匹配记录</div>
+          ) : null}
         </div>
       </Section>
     </>
@@ -127,7 +156,7 @@ function HistoryCard({
             {entry.sourceLanguage} {"->"} {entry.targetLanguage}
           </span>
           <span>{entry.serviceName}</span>
-          <span>{new Date(entry.createdAt).toLocaleString()}</span>
+          <span>{formatDate(entry.createdAt)}</span>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -141,7 +170,7 @@ function HistoryCard({
             }
           />
           <Button variant="ghost" icon={<Copy size={16} />} title="复制原文" onClick={() => copy(entry.sourceText)} />
-          <Button variant="ghost" icon={<Copy size={16} />} title="复制译文" onClick={() => copy(entry.resultText)} />
+          <Button variant="ghost" icon={<Copy size={16} />} title="复制结果" onClick={() => copy(entry.resultText)} />
           <Button
             variant="danger"
             icon={<Trash2 size={16} />}
@@ -151,7 +180,10 @@ function HistoryCard({
         </div>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-md bg-app p-3 text-sm leading-6 text-muted">{entry.sourceText}</div>
+        <div className="rounded-md bg-app p-3 text-sm leading-6 text-muted">
+          {entry.contextText ? <div className="mb-2 text-xs text-muted">上下文：{entry.contextText}</div> : null}
+          {entry.sourceText}
+        </div>
         <div className="rounded-md bg-app p-3 text-sm leading-6 text-text">{entry.resultText}</div>
       </div>
     </article>
@@ -161,5 +193,12 @@ function HistoryCard({
 function typeLabel(type: HistoryType) {
   if (type === "translation") return "翻译";
   if (type === "ocr") return "OCR";
-  return "AI 回复";
+  if (type === "ai_reply" || type === "aiReply") return "AI 代回";
+  return "AI 翻译";
+}
+
+function formatDate(value: string) {
+  const numeric = Number(value);
+  const date = Number.isFinite(numeric) && numeric > 0 ? new Date(numeric) : new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }

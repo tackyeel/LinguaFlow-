@@ -12,6 +12,7 @@ export const defaultConfig: AppConfig = {
   clipboardListen: false,
   autoPopupAfterCopy: false,
   listenPort: 60828,
+  runtimePort: null,
   minTextLength: 2,
   proxy: {
     enabled: false,
@@ -53,6 +54,7 @@ export const defaultConfig: AppConfig = {
       {
         id: "openai",
         provider: "OpenAI",
+        providerType: "OpenAICompatibleProvider",
         name: "OpenAI",
         enabled: false,
         baseUrl: "https://api.openai.com/v1",

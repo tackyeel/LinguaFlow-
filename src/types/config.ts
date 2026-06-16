@@ -3,7 +3,12 @@ export type ProxyProtocol = "http" | "https" | "socks5";
 export type LanguageDetectEngine = "local" | "service" | "ai";
 export type AiReplyCopyFormat = "replyOnly" | "replyWithExplanation";
 export type ReplyStyle = "natural" | "friendly" | "casual" | "polite" | "playful";
-export type HistoryType = "translation" | "ocr" | "aiReply";
+export type HistoryType = "translation" | "ocr" | "aiReply" | "ai_translate" | "ai_reply";
+export type AiProviderType =
+  | "OpenAICompatibleProvider"
+  | "GeminiProvider"
+  | "AnthropicProvider"
+  | "CustomProvider";
 
 export interface ProxyConfig {
   enabled: boolean;
@@ -49,6 +54,7 @@ export interface TranslateService {
 export interface AiService {
   id: string;
   provider: string;
+  providerType: AiProviderType;
   name: string;
   enabled: boolean;
   baseUrl: string;
@@ -105,6 +111,7 @@ export interface AppConfig {
   clipboardListen: boolean;
   autoPopupAfterCopy: boolean;
   listenPort: number;
+  runtimePort: number | null;
   minTextLength: number;
   proxy: ProxyConfig;
   translationSettings: TranslationSettings;
@@ -119,6 +126,7 @@ export interface HistoryEntry {
   type: HistoryType;
   sourceText: string;
   resultText: string;
+  contextText?: string;
   sourceLanguage: string;
   targetLanguage: string;
   serviceName: string;

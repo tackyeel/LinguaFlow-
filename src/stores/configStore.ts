@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { defaultConfig } from "../constants/defaultConfig";
-import type { AppConfig } from "../types/config";
+import type { AiProviderType, AppConfig } from "../types/config";
 import { deepMerge } from "../utils/deepMerge";
 import { invokeCommand, isTauriRuntime } from "../utils/tauri";
 
@@ -39,7 +39,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
         loaded = raw ? JSON.parse(raw) : null;
       }
 
-      const merged = deepMerge(defaultConfig, loaded ?? {});
+      const merged = normalizeConfig(deepMerge(defaultConfig, loaded ?? {}));
       set({ config: merged, configPath, loading: false });
 
       if (!loaded) {
@@ -69,7 +69,7 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config, null, 2));
       }
 
-      set({ config: deepMerge(defaultConfig, saved), saving: false });
+      set({ config: normalizeConfig(deepMerge(defaultConfig, saved)), saving: false });
     } catch (error) {
       set({
         saving: false,
@@ -84,10 +84,27 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
 
     if (isTauriRuntime()) {
       const saved = await invokeCommand<AppConfig>("complete_setup", { config: next });
-      set({ config: deepMerge(defaultConfig, saved), saving: false });
+      set({ config: normalizeConfig(deepMerge(defaultConfig, saved)), saving: false });
       return;
     }
 
     await get().replaceConfig(next);
   }
 }));
+
+function normalizeConfig(config: AppConfig): AppConfig {
+  config.runtimePort ??= null;
+  config.services.ai = config.services.ai.map((service) => ({
+    ...service,
+    providerType: service.providerType ?? inferProviderType(service.provider)
+  }));
+  return config;
+}
+
+function inferProviderType(provider: string): AiProviderType {
+  const lower = provider.toLowerCase();
+  if (lower.includes("gemini")) return "GeminiProvider";
+  if (lower.includes("anthropic")) return "AnthropicProvider";
+  if (lower.includes("customprovider")) return "CustomProvider";
+  return "OpenAICompatibleProvider";
+}

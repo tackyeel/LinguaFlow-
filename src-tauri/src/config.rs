@@ -135,6 +135,13 @@ pub fn listen_port(config: &Value) -> u16 {
     .unwrap_or(60828) as u16
 }
 
+pub fn set_runtime_port(app: &AppHandle, port: u16) -> Result<(), String> {
+  let mut config = read_config_value(app)?;
+  config["runtimePort"] = Value::Number(serde_json::Number::from(port));
+  save_config_value(app, config)?;
+  Ok(())
+}
+
 pub fn should_show_settings(config: &Value) -> bool {
   let first_run = config.get("firstRun").and_then(Value::as_bool).unwrap_or(true);
   let setup_completed = config
@@ -172,6 +179,7 @@ fn default_config() -> Value {
     "clipboardListen": false,
     "autoPopupAfterCopy": false,
     "listenPort": 60828,
+    "runtimePort": null,
     "minTextLength": 2,
     "proxy": {
       "enabled": false,
@@ -213,6 +221,7 @@ fn default_config() -> Value {
         {
           "id": "openai",
           "provider": "OpenAI",
+          "providerType": "OpenAICompatibleProvider",
           "name": "OpenAI",
           "enabled": false,
           "baseUrl": "https://api.openai.com/v1",

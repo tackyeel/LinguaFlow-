@@ -1,6 +1,6 @@
 # Development Log
 
-## 2026-06-16
+## 2026-06-16 第一阶段
 
 ### 完成内容
 
@@ -47,10 +47,63 @@
 - `npm audit` 通过，0 vulnerabilities。
 - `npm run tauri:build` 通过，生成 release exe、MSI 和 NSIS 安装包。
 - Runtime smoke 通过：首次启动显示 `LinguaFlow 设置`，完成设置状态启动后仅托盘常驻，配置端口 `/api/health` 返回 `{"ok":true,"app":"LinguaFlow"}`。
-- 本机 `60828` 被 `D:\potfanyi\pot.exe` 占用，因此 runtime smoke 使用生成配置中的 `60829` 验证健康检查；项目默认值仍是 `60828`。
 - Browser preview 通过：设置页五个导航项、服务页三个 Tab、热键页、翻译窗口、热键捕获窗口、截图/OCR 预留窗口均可渲染。
 
-### 下一步计划
+## 2026-06-16 第二阶段
 
-- 接入全局热键注册和剪贴板监听。
-- 将历史记录从假数据迁移到 SQLite。
+### 完成内容
+
+- 创建 Git 仓库并提交第一阶段基线：`feat: complete first-phase LinguaFlow desktop shell`。
+- 实现本地 HTTP 服务端口 fallback：优先监听 `listenPort`，占用时最多尝试后续 10 个端口，成功后写回 `runtimePort`。
+- `/api/health` 返回实际监听端口。
+- 实现 AI Provider 架构字段：provider id/name/type、baseUrl、apiKey、model、temperature、maxTokens、customHeaders、enabled、useProxy。
+- 实现 `OpenAICompatibleProvider` 真实 `/chat/completions` 调用，兼容 `/v1` 和 `/v1/chat/completions` 两种 Base URL。
+- 预留 `GeminiProvider`、`AnthropicProvider`、`CustomProvider` 占位错误提示。
+- 实现 AI Provider 测试连接命令和设置页反馈。
+- TranslateWindow 增加模式切换：翻译、AI 解释、帮我回复。
+- AI 解释和帮我回复走真实 Tauri 后端 Provider 调用。
+- 帮我回复支持对方原文、我想表达、回复风格、简短模式和自动复制【推荐回复】正文。
+- AI 成功调用后写入本地 `history.json`，历史页改为读取本地历史并保留 SQLite 迁移预留。
+- API Key 输入框使用密码框，并支持显示/隐藏。
+
+### 修改文件
+
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/src/ai.rs`
+- `src-tauri/src/config.rs`
+- `src-tauri/src/history.rs`
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/server.rs`
+- `src/types/config.ts`
+- `src/constants/defaultConfig.ts`
+- `src/stores/configStore.ts`
+- `src/utils/ai.ts`
+- `src/utils/history.ts`
+- `src/components/settings/pages/GeneralSettings.tsx`
+- `src/components/settings/pages/ServiceSettingsPage.tsx`
+- `src/components/settings/pages/HistoryPage.tsx`
+- `src/components/translate/TranslateWindow.tsx`
+- `README.md`
+- `TODO.md`
+- `DEVELOPMENT_LOG.md`
+
+### 测试结果
+
+- `npm run check` 通过。
+- `npm run build` 通过。
+- `npm audit` 通过，0 vulnerabilities。
+- `cargo test` 通过，覆盖 OpenAI-Compatible URL 拼接、必填字段校验和 mock HTTP `/chat/completions` 调用解析。
+- `npm run tauri:build` 通过，生成 release exe、MSI 和 NSIS 安装包。
+- Runtime smoke 通过：临时占用 60828 后启动 LinguaFlow，应用自动监听 60829，`config.json.runtimePort=60829`，`/api/health` 返回 `{"app":"LinguaFlow","ok":true,"port":60829}`。
+- Mock AI runtime smoke 通过：使用本地 OpenAI-Compatible mock 服务验证 `POST /api/translate/text` 返回【自然翻译】，`POST /api/ai/reply` 返回【推荐回复】，成功后写入 `history.json` 的 `ai_translate` 和 `ai_reply` 记录。
+- 错误 smoke 通过：清空 API Key 后调用 AI 翻译返回 400，错误正文为 `API Key 为空，请在 AI 翻译设置中填写 API Key。`，应用未崩溃。
+- Browser UI preview smoke 通过：常规设置显示配置端口和当前实际监听端口；AI Provider 页显示 provider type、Base URL、API Key、model、temperature、maxTokens、customHeaders、useProxy 和测试连接；修改 API Key 后刷新页面仍保留；API Key 默认 `password`，显示/隐藏可切换；空 API Key 测试连接错误显示在页面；TranslateWindow 三种模式可切换，帮我回复模式显示对方原文、我想表达、回复风格、简短模式、自动复制推荐回复和输入校验。真实 Tauri 后端调用由 release exe runtime smoke 覆盖。
+
+### 还剩什么没做
+
+- GeminiProvider、AnthropicProvider、CustomProvider 仍是占位。
+- API Key 仍以本地 `config.json` 明文保存，后续需接系统凭据管理器或加密存储。
+- 历史记录仍是 JSON 文件，后续迁移 SQLite。
+- 端口设置变更后需要重启应用才会重启本地 HTTP 服务。
+- 全局热键、剪贴板监听、截图 OCR 仍待实现。
