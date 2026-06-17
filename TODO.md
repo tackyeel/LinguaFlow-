@@ -28,3 +28,10 @@
 - [ ] 实现 AnthropicProvider。
 - [ ] 实现 CustomProvider。
 - [ ] 实现外置插件发现、加载和隔离执行。
+
+## Dynamic Island Follow-up
+
+- [x] Add independent `dynamic-island` Tauri window and mode switching from TranslateWindow.
+- [x] Persist `translatorWindowMode` as `normal` / `dynamicIsland`.
+- [x] Reuse existing translation, AI explanation, AI reply, auto-copy, language settings, and history write paths in Dynamic Island Mode.
+- [ ] Enhance system-level outside-click detection beyond blur / Esc / collapse button for frameless transparent Dynamic Island windows.

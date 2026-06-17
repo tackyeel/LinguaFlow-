@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { clsx } from "clsx";
+import { cn } from "./../../utils/cn"; // we can use the cn utility
 
 interface SectionProps {
   title: string;
@@ -9,12 +9,14 @@ interface SectionProps {
 
 export function Section({ title, description, children }: SectionProps) {
   return (
-    <section className="rounded-lg border border-line/10 bg-panel p-5 shadow-glow">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-text">{title}</h2>
-        {description ? <p className="mt-1 text-sm leading-6 text-muted">{description}</p> : null}
+    <section className="rounded-2xl border border-border-subtle bg-surface p-6 shadow-sm">
+      <div className="mb-6">
+        <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+        {description ? <p className="mt-1 text-sm leading-relaxed text-text-secondary">{description}</p> : null}
       </div>
-      <div className="grid gap-3">{children}</div>
+      <div className="flex flex-col divide-y divide-border-subtle">
+        {children}
+      </div>
     </section>
   );
 }
@@ -29,16 +31,18 @@ interface FieldProps {
 export function Field({ label, description, children, alignTop }: FieldProps) {
   return (
     <label
-      className={clsx(
-        "grid gap-3 rounded-md border border-line/10 bg-panel2/50 p-3 sm:grid-cols-[minmax(160px,1fr)_minmax(240px,1.3fr)]",
-        alignTop ? "items-start" : "items-center"
+      className={cn(
+        "flex min-h-[64px] flex-col gap-4 px-2 py-4 transition-colors hover:bg-surface-hover sm:flex-row sm:justify-between",
+        alignTop ? "sm:items-start" : "sm:items-center"
       )}
     >
-      <span>
-        <span className="block text-sm font-medium text-text">{label}</span>
-        {description ? <span className="mt-1 block text-xs leading-5 text-muted">{description}</span> : null}
+      <span className="min-w-0 flex-1 pr-4">
+        <span className="block text-sm font-medium text-text-primary">{label}</span>
+        {description ? <span className="mt-1 block text-xs leading-relaxed text-text-secondary">{description}</span> : null}
       </span>
-      {children}
+      <div className="w-full min-w-[200px] flex-shrink-0 sm:w-auto">
+        {children}
+      </div>
     </label>
   );
 }
@@ -50,8 +54,8 @@ interface TextInputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function TextInput({ className, mono, ...props }: TextInputProps) {
   return (
     <input
-      className={clsx(
-        "h-9 w-full rounded-md border border-line/10 bg-app px-3 text-sm text-text outline-none transition placeholder:text-muted/70 focus:border-primary/70",
+      className={cn(
+        "h-10 w-full rounded-xl border border-border bg-surface px-4 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-1 focus:ring-accent",
         mono && "font-mono",
         className
       )}
@@ -63,8 +67,8 @@ export function TextInput({ className, mono, ...props }: TextInputProps) {
 export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={clsx(
-        "min-h-28 w-full resize-y rounded-md border border-line/10 bg-app px-3 py-2 text-sm leading-6 text-text outline-none transition placeholder:text-muted/70 focus:border-primary/70",
+      className={cn(
+        "min-h-[112px] w-full resize-y rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-relaxed text-text-primary outline-none transition placeholder:text-text-muted focus:border-accent focus:ring-1 focus:ring-accent",
         className
       )}
       {...props}
@@ -75,8 +79,8 @@ export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 export function SelectInput({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={clsx(
-        "h-9 w-full rounded-md border border-line/10 bg-app px-3 text-sm text-text outline-none transition focus:border-primary/70",
+      className={cn(
+        "h-10 w-full rounded-xl border border-border bg-surface px-4 text-sm text-text-primary outline-none transition focus:border-accent focus:ring-1 focus:ring-accent",
         className
       )}
       {...props}
@@ -100,14 +104,14 @@ export function Switch({ checked, onChange, label }: SwitchProps) {
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={clsx(
-        "ml-auto flex h-6 w-11 items-center rounded-full border border-line/10 p-0.5 transition",
-        checked ? "bg-primary" : "bg-app"
+      className={cn(
+        "ml-auto flex h-6 w-11 items-center rounded-full p-0.5 transition-colors",
+        checked ? "bg-accent" : "bg-border-subtle"
       )}
     >
       <span
-        className={clsx(
-          "block h-5 w-5 rounded-full bg-white shadow transition",
+        className={cn(
+          "block h-5 w-5 rounded-full bg-white shadow-sm transition-transform",
           checked ? "translate-x-5" : "translate-x-0"
         )}
       />
@@ -117,7 +121,7 @@ export function Switch({ checked, onChange, label }: SwitchProps) {
 
 export function Pill({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex h-7 items-center rounded-md border border-line/10 bg-panel2 px-2 text-xs font-medium text-muted">
+    <span className="inline-flex h-6 items-center rounded-full bg-surface-selected px-3 text-xs font-medium text-accent">
       {children}
     </span>
   );

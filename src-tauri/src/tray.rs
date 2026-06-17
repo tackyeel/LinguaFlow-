@@ -33,7 +33,7 @@ pub fn create_tray(app: &mut tauri::App) -> tauri::Result<()> {
     .show_menu_on_left_click(false)
     .on_menu_event(|app, event| match event.id.as_ref() {
       "open_translate" => {
-        let _ = window::show_window_by_label(app, "translate");
+        let _ = window::show_translator_window(app);
       }
       "open_settings" => {
         let _ = window::show_window_by_label(app, "settings");

@@ -26,20 +26,37 @@
         "center": true,
         "visible": false,
         "resizable": true,
-        "decorations": true
+        "decorations": false
       },
       {
         "label": "translate",
         "title": "LinguaFlow 翻译",
         "url": "/",
-        "width": 520,
-        "height": 420,
+        "width": 420,
+        "height": 530,
         "minWidth": 420,
-        "minHeight": 340,
+        "minHeight": 530,
         "center": true,
         "visible": false,
         "resizable": true,
-        "decorations": true
+        "decorations": false
+      },
+      {
+        "label": "dynamic-island",
+        "title": "LinguaFlow 灵动岛",
+        "url": "/",
+        "width": 340,
+        "height": 64,
+        "minWidth": 340,
+        "minHeight": 64,
+        "center": true,
+        "visible": false,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       },
       {
         "label": "hotkey-recorder",
@@ -50,7 +67,7 @@
         "center": true,
         "visible": false,
         "resizable": false,
-        "decorations": true
+        "decorations": false
       },
       {
         "label": "screenshot-overlay",
@@ -61,7 +78,7 @@
         "center": true,
         "visible": false,
         "resizable": true,
-        "decorations": true,
+        "decorations": false,
         "transparent": true
       }
     ]

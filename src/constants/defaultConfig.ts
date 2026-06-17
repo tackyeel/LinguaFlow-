@@ -4,7 +4,7 @@ import { DEFAULT_AI_REPLY_PROMPT, DEFAULT_AI_TRANSLATION_PROMPT } from "./prompt
 export const defaultConfig: AppConfig = {
   firstRun: true,
   setupCompleted: false,
-  theme: "dark",
+  theme: "light",
   startup: false,
   trayOnlyOnLaunch: true,
   animations: true,
@@ -14,6 +14,7 @@ export const defaultConfig: AppConfig = {
   listenPort: 60828,
   runtimePort: null,
   minTextLength: 2,
+  translatorWindowMode: "normal",
   proxy: {
     enabled: false,
     protocol: "http",
@@ -37,7 +38,9 @@ export const defaultConfig: AppConfig = {
     autoHideOnBlur: false,
     focusResultAfterTranslate: true,
     autoCopyAiReply: false,
-    aiReplyCopyFormat: "replyOnly"
+    aiReplyCopyFormat: "replyOnly",
+    enableAiInTranslateWindow: true,
+    resultOrder: ["google", "bing", "lingva", "ai"]
   },
   hotkeys: {
     inputTranslate: "Ctrl+Alt+T",
@@ -46,9 +49,9 @@ export const defaultConfig: AppConfig = {
   },
   services: {
     translate: [
-      { id: "google", type: "built-in", name: "谷歌翻译", enabled: true, iconText: "G" },
-      { id: "bing", type: "built-in", name: "必应翻译", enabled: true, iconText: "B" },
-      { id: "lingva", type: "built-in", name: "Lingva 翻译", enabled: false, iconText: "L" }
+      { id: "google", type: "built-in", name: "谷歌翻译", enabled: true, iconText: "G", provider: "google", description: "免配置通用翻译服务。", config: { endpoint: "https://translate.googleapis.com" } },
+      { id: "bing", type: "built-in", name: "必应翻译", enabled: true, iconText: "B", provider: "bing", description: "免配置通用翻译服务。", config: { endpoint: "https://api-edge.cognitive.microsofttranslator.com" } },
+      { id: "lingva", type: "built-in", name: "Lingva 翻译", enabled: false, iconText: "L", provider: "lingva", description: "Lingva 翻译服务。", config: { endpoint: "https://lingva.ml" } }
     ],
     ai: [
       {
@@ -67,8 +70,8 @@ export const defaultConfig: AppConfig = {
       }
     ],
     ocr: [
-      { id: "system-ocr", type: "system", name: "系统 OCR", enabled: true, iconText: "S" },
-      { id: "tesseract", type: "plugin", name: "Tesseract.js", enabled: false, iconText: "T" }
+      { id: "system-ocr", type: "system", name: "系统 OCR", enabled: true, iconText: "S", provider: "system", description: "系统内置 OCR。" },
+      { id: "tesseract", type: "plugin", name: "Tesseract.js", enabled: false, iconText: "T", provider: "tesseract", description: "Tesseract OCR 插件。" }
     ]
   },
   aiSettings: {

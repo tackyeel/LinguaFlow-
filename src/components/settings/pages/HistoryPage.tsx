@@ -1,21 +1,12 @@
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from "react";
-import { Copy, Download, Heart, RefreshCw, Search, Trash2 } from "lucide-react";
-import { demoHistory } from "../../../constants/defaultConfig";
-import type { HistoryEntry, HistoryType } from "../../../types/config";
-import { getHistoryEntries } from "../../../utils/history";
+import { useEffect, useState } from "react";
+import { Download, History as HistoryIcon, RefreshCw, Trash2 } from "lucide-react";
+import type { HistoryEntry } from "../../../types/config";
+import { clearHistoryEntries, getHistoryEntries } from "../../../utils/history";
 import { Button } from "../../ui/Button";
-import { Field, Section, SelectInput, TextInput } from "../../ui/Form";
-import { PageHeader } from "./GeneralSettings";
-
-type HistoryFilter = "all" | HistoryType;
+import { EmptyState, PageHeader } from "../../ui/Material";
 
 export function HistoryPage() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
-  const [query, setQuery] = useState("");
-  const [type, setType] = useState<HistoryFilter>("all");
-  const [language, setLanguage] = useState("all");
-  const [service, setService] = useState("all");
-  const [date, setDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -23,11 +14,10 @@ export function HistoryPage() {
     setLoading(true);
     setError("");
     try {
-      const history = await getHistoryEntries();
-      setEntries(history.length ? history : demoHistory);
+      setEntries(await getHistoryEntries());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
-      setEntries(demoHistory);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -37,168 +27,139 @@ export function HistoryPage() {
     void loadHistory();
   }, []);
 
-  const filteredEntries = useMemo(
-    () =>
-      entries.filter((entry) => {
-        const haystack = `${entry.sourceText} ${entry.resultText} ${entry.contextText ?? ""}`.toLowerCase();
-        const matchesQuery = !query || haystack.includes(query.toLowerCase());
-        const matchesType = type === "all" || entry.type === type;
-        const matchesLanguage =
-          language === "all" || entry.sourceLanguage === language || entry.targetLanguage === language;
-        const matchesService = service === "all" || entry.serviceName === service;
-        const matchesDate = !date || entry.createdAt.startsWith(date);
-        return matchesQuery && matchesType && matchesLanguage && matchesService && matchesDate;
-      }),
-    [date, entries, language, query, service, type]
-  );
-
-  const services = Array.from(new Set(entries.map((entry) => entry.serviceName)));
-  const languages = Array.from(new Set(entries.flatMap((entry) => [entry.sourceLanguage, entry.targetLanguage])));
-
   const exportJson = () => {
-    const blob = new Blob([JSON.stringify(filteredEntries, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(entries, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "linguaflow-history.json";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
     anchor.click();
+    anchor.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const clearAll = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await clearHistoryEntries();
+      setEntries([]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <>
-      <PageHeader title="历史记录" description="AI 翻译和 AI 代回成功后会写入本地 history.json；SQLite 已预留。" />
-      <Section title="筛选">
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="搜索" alignTop>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-2.5 text-muted" size={16} />
-              <TextInput className="pl-9" value={query} onChange={(event) => setQuery(event.target.value)} />
-            </div>
-          </Field>
-          <Field label="类型筛选">
-            <SelectInput value={type} onChange={(event) => setType(event.target.value as HistoryFilter)}>
-              <option value="all">全部</option>
-              <option value="translation">翻译</option>
-              <option value="ocr">OCR</option>
-              <option value="aiReply">AI 回复旧格式</option>
-              <option value="ai_translate">AI 翻译</option>
-              <option value="ai_reply">AI 代回</option>
-            </SelectInput>
-          </Field>
-          <Field label="语言筛选">
-            <SelectInput value={language} onChange={(event) => setLanguage(event.target.value)}>
-              <option value="all">全部语言</option>
-              {languages.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-          <Field label="服务筛选">
-            <SelectInput value={service} onChange={(event) => setService(event.target.value)}>
-              <option value="all">全部服务</option>
-              {services.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-          <Field label="日期筛选">
-            <TextInput type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          </Field>
-          <div className="flex flex-wrap items-center justify-end gap-2 rounded-md border border-line/10 bg-panel2/50 p-3">
-            <Button icon={<RefreshCw size={16} />} disabled={loading} onClick={() => void loadHistory()}>
+      <PageHeader
+        title="历史记录"
+        actions={
+          <>
+            <Button size="sm" variant="secondary" icon={<RefreshCw size={15} />} disabled={loading} onClick={() => void loadHistory()}>
               刷新
             </Button>
-            <Button icon={<Download size={16} />} onClick={exportJson}>
-              导出 JSON
+            <Button size="sm" variant="secondary" icon={<Download size={15} />} disabled={!entries.length} onClick={exportJson}>
+              导出
             </Button>
-            <Button variant="danger" icon={<Trash2 size={16} />} onClick={() => setEntries([])}>
-              清空视图
+            <Button size="sm" variant="danger" icon={<Trash2 size={15} />} disabled={!entries.length || loading} onClick={() => void clearAll()}>
+              清空
             </Button>
+          </>
+        }
+      />
+
+      {error ? <div className="mb-4 rounded-lg border border-danger-soft bg-danger-soft p-3 text-sm text-danger">{error}</div> : null}
+
+      {entries.length ? (
+        <div className="overflow-hidden rounded-lg border border-border-subtle bg-surface text-text-primary shadow-sm dark:bg-surface">
+          <div className="max-h-[calc(100vh-190px)] overflow-auto">
+            {entries.map((entry) => (
+              <HistoryRow
+                key={entry.id}
+                entry={entry}
+                onDelete={() => setEntries((current) => current.filter((item) => item.id !== entry.id))}
+              />
+            ))}
           </div>
         </div>
-        {error ? <div className="rounded-md border border-danger/30 bg-danger/10 p-3 text-sm text-danger">{error}</div> : null}
-      </Section>
-
-      <Section title="记录">
-        <div className="grid gap-3">
-          {filteredEntries.map((entry) => (
-            <HistoryCard key={entry.id} entry={entry} setEntries={setEntries} />
-          ))}
-          {filteredEntries.length === 0 ? (
-            <div className="rounded-md bg-panel2/50 p-6 text-center text-sm text-muted">没有匹配记录</div>
-          ) : null}
-        </div>
-      </Section>
+      ) : (
+        <EmptyState
+          icon={<HistoryIcon size={22} />}
+          title="没有历史记录"
+          description="完成一次翻译、OCR 或 AI 回复后，记录会显示在这里。"
+        />
+      )}
     </>
   );
 }
 
-function HistoryCard({
-  entry,
-  setEntries
-}: {
-  entry: HistoryEntry;
-  setEntries: Dispatch<SetStateAction<HistoryEntry[]>>;
-}) {
-  const copy = (text: string) => void navigator.clipboard?.writeText(text);
-
+function HistoryRow({ entry, onDelete }: { entry: HistoryEntry; onDelete: () => void }) {
   return (
-    <article className="rounded-md border border-line/10 bg-panel2/50 p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span className="rounded-md bg-app px-2 py-1">{typeLabel(entry.type)}</span>
-          <span>
-            {entry.sourceLanguage} {"->"} {entry.targetLanguage}
-          </span>
-          <span>{entry.serviceName}</span>
-          <span>{formatDate(entry.createdAt)}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            icon={<Heart size={16} className={entry.isFavorite ? "fill-danger text-danger" : ""} />}
-            title="收藏"
-            onClick={() =>
-              setEntries((current) =>
-                current.map((item) => (item.id === entry.id ? { ...item, isFavorite: !item.isFavorite } : item))
-              )
-            }
-          />
-          <Button variant="ghost" icon={<Copy size={16} />} title="复制原文" onClick={() => copy(entry.sourceText)} />
-          <Button variant="ghost" icon={<Copy size={16} />} title="复制结果" onClick={() => copy(entry.resultText)} />
-          <Button
-            variant="danger"
-            icon={<Trash2 size={16} />}
-            title="删除"
-            onClick={() => setEntries((current) => current.filter((item) => item.id !== entry.id))}
-          />
-        </div>
+    <div className="group grid min-h-[44px] grid-cols-1 items-center gap-3 border-b border-border-subtle px-4 py-2 text-sm last:border-b-0 hover:bg-surface-hover lg:grid-cols-[28px_minmax(0,1fr)_92px_minmax(0,1fr)_150px_32px]">
+      <div className="hidden h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-hover text-xs font-semibold text-text-primary lg:grid">
+        {serviceMark(entry.serviceName)}
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-md bg-app p-3 text-sm leading-6 text-muted">
-          {entry.contextText ? <div className="mb-2 text-xs text-muted">上下文：{entry.contextText}</div> : null}
-          {entry.sourceText}
-        </div>
-        <div className="rounded-md bg-app p-3 text-sm leading-6 text-text">{entry.resultText}</div>
+      <button
+        type="button"
+        className="min-w-0 truncate text-left font-medium text-text-primary"
+        title={entry.sourceText}
+        onClick={() => void navigator.clipboard?.writeText(entry.sourceText)}
+      >
+        {entry.sourceText}
+      </button>
+      <div className="flex items-center gap-2 text-xs font-medium text-text-secondary">
+        <span>{languageMark(entry.sourceLanguage)}</span>
+        <span className="text-text-muted">→</span>
+        <span>{languageMark(entry.targetLanguage)}</span>
       </div>
-    </article>
+      <button
+        type="button"
+        className="min-w-0 truncate text-left font-semibold text-text-primary"
+        title={entry.resultText}
+        onClick={() => void navigator.clipboard?.writeText(entry.resultText)}
+      >
+        {entry.resultText}
+      </button>
+      <div className="whitespace-nowrap text-xs font-medium text-text-secondary">{formatDate(entry.createdAt)}</div>
+      <button
+        type="button"
+        aria-label="删除记录"
+        title="删除记录"
+        className="grid h-8 w-8 place-items-center rounded-full text-text-muted opacity-100 transition hover:bg-danger-soft hover:text-danger lg:opacity-0 lg:group-hover:opacity-100"
+        onClick={onDelete}
+      >
+        <Trash2 size={15} />
+      </button>
+    </div>
   );
 }
 
-function typeLabel(type: HistoryType) {
-  if (type === "translation") return "翻译";
-  if (type === "ocr") return "OCR";
-  if (type === "ai_reply" || type === "aiReply") return "AI 代回";
-  return "AI 翻译";
+function serviceMark(serviceName: string) {
+  const normalized = serviceName.trim();
+  if (!normalized) return "AI";
+  if (normalized.toLowerCase().includes("google")) return "G";
+  if (normalized.toLowerCase().includes("bing")) return "B";
+  return normalized.slice(0, 2).toUpperCase();
+}
+
+function languageMark(language: string) {
+  const normalized = language.toLowerCase();
+  if (normalized.startsWith("zh") || normalized.includes("chinese")) return "🇨🇳";
+  if (normalized.startsWith("en") || normalized.includes("english")) return "🇬🇧";
+  if (normalized.startsWith("ja") || normalized.includes("japanese")) return "🇯🇵";
+  if (normalized.startsWith("ko") || normalized.includes("korean")) return "🇰🇷";
+  if (normalized.startsWith("fr")) return "FR";
+  if (normalized.startsWith("de")) return "DE";
+  if (normalized.startsWith("es")) return "ES";
+  return language.toUpperCase();
 }
 
 function formatDate(value: string) {
   const numeric = Number(value);
   const date = Number.isFinite(numeric) && numeric > 0 ? new Date(numeric) : new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }

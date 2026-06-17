@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::time::Duration;
 use tauri::AppHandle;
 
-use crate::{config, history};
+use crate::config;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,25 +103,14 @@ pub async fn ai_translate(app: AppHandle, request: AiTranslateRequest) -> Result
     .replace("{text}", &request.source_text)
     .replace("{{scene}}", &request.scene)
     .replace("{scene}", &request.scene);
+  let prompt = format!(
+    "{prompt}\n\n最终输出只能包含【自然翻译】、【语气解释】、【代替回复】三个部分。不要输出【难懂词/梗解释】、【直译参考】或其他额外部分。"
+  );
   let user = format!(
     "源语言：{}\n目标语言：{}\n使用场景：{}\n用户文本：\n{}",
     request.source_language, request.target_language, request.scene, request.source_text
   );
   let content = call_provider(&config_value, &provider, &prompt, &user, None).await?;
-
-  history::append_history_entry(
-    &app,
-    json!({
-      "type": "ai_translate",
-      "sourceText": request.source_text,
-      "resultText": content,
-      "sourceLanguage": request.source_language,
-      "targetLanguage": request.target_language,
-      "serviceName": provider.name,
-      "createdAt": now_iso(),
-      "isFavorite": false
-    }),
-  )?;
 
   Ok(AiCallResult {
     ok: true,
@@ -148,6 +137,9 @@ pub async fn ai_reply(app: AppHandle, request: AiReplyRequest) -> Result<AiCallR
     .replace("{reply_style}", &request.reply_style)
     .replace("{{short_mode}}", if request.short_mode { "true" } else { "false" })
     .replace("{short_mode}", if request.short_mode { "true" } else { "false" });
+  let prompt = format!(
+    "{prompt}\n\n最终输出至少包含两种不同回复，优先使用【推荐回复】、【更随便一点】、【更礼貌一点】这些标题；不要输出无关说明。"
+  );
   let user = format!(
     "对方原文：\n{}\n\n我想表达的意思：\n{}\n\n目标语言：{}\n回复风格：{}\n简短模式：{}",
     request.context_text,
@@ -157,21 +149,6 @@ pub async fn ai_reply(app: AppHandle, request: AiReplyRequest) -> Result<AiCallR
     if request.short_mode { "是" } else { "否" }
   );
   let content = call_provider(&config_value, &provider, &prompt, &user, None).await?;
-
-  history::append_history_entry(
-    &app,
-    json!({
-      "type": "ai_reply",
-      "sourceText": request.user_intent,
-      "contextText": request.context_text,
-      "resultText": content,
-      "sourceLanguage": "zh-CN",
-      "targetLanguage": request.target_language,
-      "serviceName": provider.name,
-      "createdAt": now_iso(),
-      "isFavorite": false
-    }),
-  )?;
 
   Ok(AiCallResult {
     ok: true,
@@ -409,14 +386,6 @@ fn detail_suffix(detail: &str) -> String {
   } else {
     format!(" 返回：{}", detail.trim())
   }
-}
-
-fn now_iso() -> String {
-  let millis = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .map(|duration| duration.as_millis())
-    .unwrap_or(0);
-  format!("{millis}")
 }
 
 fn default_temperature() -> f64 {

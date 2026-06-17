@@ -107,3 +107,33 @@
 - 历史记录仍是 JSON 文件，后续迁移 SQLite。
 - 端口设置变更后需要重启应用才会重启本地 HTTP 服务。
 - 全局热键、剪贴板监听、截图 OCR 仍待实现。
+
+## 2026-06-17 Dynamic Island Mode
+
+### Completed
+
+- Added `framer-motion` for spring-based Dynamic Island transitions.
+- Added `DynamicIslandWindow`, `DynamicIsland`, `DynamicIslandPanel`, and `DynamicIslandResult`.
+- Added `useTranslatorEngine` for Dynamic Island translation flow, reusing existing translation services, AI translation, AI reply, clipboard ignore, auto-copy AI reply setting, and history writes.
+- Added `translatorWindowMode` config persistence with `normal` and `dynamicIsland` modes.
+- Added a frameless transparent always-on-top Tauri window labeled `dynamic-island`.
+- Added Tauri commands to switch translator modes and resize/reposition Dynamic Island at the top center of the primary display.
+- Wired the existing TranslateWindow left-top switch button to enter Dynamic Island Mode and added an in-island button to return to the normal window.
+- Implemented hover/click expand, blur/Esc/collapse-button collapse, collapsed translating/success/error/idle states, progress animation, and tabbed result panel.
+
+### Verification
+
+- `npm run check` passed.
+- `npm run build` passed.
+- `npm run tauri:build` passed and produced release exe, MSI, and NSIS bundles.
+
+### Remaining
+
+- System-level outside-click detection for transparent frameless windows is currently represented by blur, Esc, and the collapse button. A global outside-click detector remains as a follow-up.
+
+### 2026-06-17 Desktop Fix
+
+- Fixed Dynamic Island clipping on Windows display scaling by switching the Tauri resize path from physical pixels to logical pixels.
+- Kept the Dynamic Island window on a stable expanded transparent canvas so React spring animation is not clipped by system window resizing.
+- Forced the dynamic-island WebView background to transparent when the window is shown or repositioned.
+- Updated clipboard auto-popup to respect `translatorWindowMode` and emit copied text to the dynamic-island window as well as the normal translate window.

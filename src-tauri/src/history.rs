@@ -12,6 +12,12 @@ pub fn append_history(app: AppHandle, entry: Value) -> Result<Value, String> {
   append_history_entry(&app, entry)
 }
 
+#[tauri::command]
+pub fn clear_history(app: AppHandle) -> Result<(), String> {
+  let path = history_path(&app)?;
+  fs::write(path, "[]").map_err(|error| error.to_string())
+}
+
 pub fn append_history_entry(app: &AppHandle, entry: Value) -> Result<Value, String> {
   let mut history = read_history(&app).unwrap_or_default();
   let mut next = entry;

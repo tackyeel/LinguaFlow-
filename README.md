@@ -109,3 +109,13 @@ npm run tauri:build
 - 实现截图框选、OCR、截图翻译流程。
 - 用 SQLite 持久化历史记录。
 - 外置插件加载、拖拽排序和服务测试。
+
+## Dynamic Island Mode
+
+- LinguaFlow now supports two translator window modes: `normal` and `dynamicIsland`, persisted as `translatorWindowMode` in `config.json`.
+- The normal TranslateWindow keeps its existing behavior and uses the left-top switch button to enter Dynamic Island Mode.
+- Dynamic Island Mode runs in an independent Tauri window labeled `dynamic-island`, with transparent frameless always-on-top chrome.
+- Collapsed size is 300 x 50 px; expanded size is 550 x 330 px, positioned at the top center of the primary display after every resize.
+- Hover or click expands the island. Blur, Esc, or the collapse button returns it to the 300 x 50 px collapsed state.
+- The expanded island includes language controls, swap, input, AI Auto, normal-window switch, tabs for Translation / AI Explanation / AI Reply, copy, clear, AI Explain, and Help me reply actions.
+- The island reuses the existing translation services, AI translation, AI reply, auto-copy AI reply setting, language settings, and local history writes.

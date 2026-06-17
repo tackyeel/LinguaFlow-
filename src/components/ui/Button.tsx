@@ -1,27 +1,45 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { clsx } from "clsx";
+import { cn } from "../../utils/cn";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg" | "icon";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
   variant?: ButtonVariant;
+  size?: ButtonSize;
 }
 
 const variantClass: Record<ButtonVariant, string> = {
-  primary: "bg-primary/95 text-black hover:bg-primary",
-  secondary: "bg-panel2 text-text hover:bg-panel2/80 border border-line/10",
-  ghost: "text-muted hover:bg-panel2 hover:text-text",
-  danger: "bg-danger/15 text-danger hover:bg-danger/25 border border-danger/20"
+  primary: "bg-accent text-white border border-transparent hover:bg-accent-hover shadow-sm",
+  secondary: "bg-surface text-accent border border-border hover:bg-surface-hover shadow-sm",
+  ghost: "bg-transparent text-text-secondary border border-transparent hover:bg-surface-hover hover:text-text-primary",
+  danger: "bg-danger-soft text-danger border border-transparent hover:opacity-80"
 };
 
-export function Button({ children, icon, className, variant = "secondary", type = "button", ...props }: ButtonProps) {
+const sizeClass: Record<ButtonSize, string> = {
+  sm: "h-8 px-4 text-xs rounded-full",
+  md: "h-10 px-5 text-sm rounded-full",
+  lg: "h-12 px-6 text-base rounded-full",
+  icon: "h-10 w-10 rounded-full p-0 flex items-center justify-center"
+};
+
+export function Button({ 
+  children, 
+  icon, 
+  className, 
+  variant = "secondary", 
+  size = "md",
+  type = "button", 
+  ...props 
+}: ButtonProps) {
   return (
     <button
       type={type}
-      className={clsx(
-        "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center gap-2 font-medium transition-all duration-200 ease-in-out active:scale-[0.98] outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100",
         variantClass[variant],
+        sizeClass[size],
         className
       )}
       {...props}

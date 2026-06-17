@@ -1,65 +1,138 @@
-import { Keyboard, RotateCcw, Settings2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Keyboard, RotateCcw, Settings2, X } from "lucide-react";
 import { Button } from "../../ui/Button";
-import { Field, Section } from "../../ui/Form";
+import { Keycap, PageHeader, SectionCard } from "../../ui/Material";
 import { useConfigStore } from "../../../stores/configStore";
 import type { HotkeyAction } from "../../../types/config";
-import { getHotkeyActionLabel } from "../../../utils/hotkeys";
-import { showWindow } from "../../../utils/tauri";
-import { PageHeader } from "./GeneralSettings";
+import { eventToHotkey, findHotkeyConflict, getHotkeyActionLabel } from "../../../utils/hotkeys";
 
-const hotkeyActions: HotkeyAction[] = ["inputTranslate", "ocr", "screenshotTranslate"];
+const hotkeyActions: Array<{ action: HotkeyAction; description: string }> = [
+  { action: "inputTranslate", description: "打开输入翻译窗口。" },
+  { action: "ocr", description: "捕获屏幕区域并识别文本。" },
+  { action: "screenshotTranslate", description: "捕获屏幕区域并翻译识别结果。" }
+];
 
 export function HotkeySettingsPage() {
   const { config, updateConfig } = useConfigStore();
+  const [recordingAction, setRecordingAction] = useState<HotkeyAction | null>(null);
+  const [draftHotkey, setDraftHotkey] = useState("");
 
-  const openRecorder = (action: HotkeyAction) => {
-    window.localStorage.setItem("linguaflow.pendingHotkeyAction", action);
-    void showWindow("hotkey-recorder");
+  useEffect(() => {
+    if (!recordingAction) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (event.key === "Escape") {
+        setDraftHotkey("");
+        return;
+      }
+
+      const next = eventToHotkey(event);
+      if (next) setDraftHotkey(next);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [recordingAction]);
+
+  const startRecording = (action: HotkeyAction) => {
+    setRecordingAction(action);
+    setDraftHotkey(config.hotkeys[action] ?? "");
   };
+
+  const cancelRecording = () => {
+    setRecordingAction(null);
+    setDraftHotkey("");
+  };
+
+  const confirmRecording = (action: HotkeyAction) =>
+    void updateConfig((draft) => {
+      draft.hotkeys[action] = draftHotkey;
+    }).then(cancelRecording);
 
   return (
     <>
-      <PageHeader title="热键设置" description="点击设置会打开独立热键捕获窗口，确认后保存到 config.json。" />
-      <Section title="全局热键" description="TODO: 全局注册接入 Tauri 插件；第一阶段已完成捕获、冲突检查和保存。">
-        {hotkeyActions.map((action) => (
-          <Field key={action} label={getHotkeyActionLabel(action)}>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="inline-flex h-9 min-w-36 items-center justify-center rounded-md border border-line/10 bg-app px-3 font-mono text-sm text-primary">
-                {config.hotkeys[action] || "未设置"}
-              </span>
-              <Button icon={<Settings2 size={16} />} onClick={() => openRecorder(action)}>
-                设置
-              </Button>
-              <Button
-                variant="ghost"
-                icon={<RotateCcw size={16} />}
-                onClick={() =>
-                  void updateConfig((draft) => {
-                    draft.hotkeys[action] = "";
-                  })
-                }
-              >
-                清除
-              </Button>
+      <PageHeader title="热键设置" description="在当前页面录制并确认全局快捷键。" />
+
+      <SectionCard>
+        {hotkeyActions.map(({ action, description }) => {
+          const isRecording = recordingAction === action;
+          const value = isRecording ? draftHotkey : config.hotkeys[action];
+          const conflict = isRecording && draftHotkey ? findHotkeyConflict(config.hotkeys, action, draftHotkey) : null;
+
+          return (
+            <div
+              key={action}
+              className="flex flex-col gap-4 border-b border-border-subtle px-6 py-5 last:border-b-0 lg:flex-row lg:items-center lg:justify-between"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-medium text-text-primary">
+                  {isRecording ? <Keyboard size={16} className="text-accent" /> : null}
+                  {getHotkeyActionLabel(action)}
+                </div>
+                <div className="mt-1 text-sm text-text-secondary">{description}</div>
+                {isRecording ? (
+                  <div className="mt-3 rounded-lg border border-accent/30 bg-accent-soft px-4 py-3 text-xs leading-5 text-text-secondary">
+                    按下想使用的组合键，按 Esc 清空。确认之前不会保存。
+                    {conflict ? <div className="mt-1 font-medium text-danger">该快捷键已被 {conflict} 占用。</div> : null}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <HotkeyPreview value={value} recording={isRecording} />
+                {isRecording ? (
+                  <>
+                    <Button size="sm" variant="primary" icon={<Check size={15} />} disabled={!draftHotkey || Boolean(conflict)} onClick={() => confirmRecording(action)}>
+                      确定
+                    </Button>
+                    <Button size="sm" variant="ghost" icon={<X size={15} />} onClick={cancelRecording}>
+                      取消
+                    </Button>
+                  </>
+                ) : (
+                  <Button size="sm" icon={<Settings2 size={15} />} onClick={() => startRecording(action)}>
+                    设置
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<RotateCcw size={15} />}
+                  onClick={() => {
+                    if (isRecording) {
+                      setDraftHotkey("");
+                      return;
+                    }
+                    void updateConfig((draft) => {
+                      draft.hotkeys[action] = "";
+                    });
+                  }}
+                >
+                  清除
+                </Button>
+              </div>
             </div>
-          </Field>
-        ))}
-      </Section>
-      <Section title="功能目标">
-        <div className="grid gap-3 md:grid-cols-3">
-          {[
-            ["输入翻译", "弹出 TranslateWindow，让用户输入文字并翻译。"],
-            ["文字识别", "TODO: 打开截图框选窗口，OCR 后显示识别文字。"],
-            ["截图翻译", "TODO: 打开截图框选窗口，OCR 后自动翻译。"]
-          ].map(([title, body]) => (
-            <div key={title} className="rounded-md border border-line/10 bg-panel2/50 p-4">
-              <Keyboard size={18} className="mb-3 text-primary" />
-              <h3 className="text-sm font-semibold">{title}</h3>
-              <p className="mt-2 text-xs leading-5 text-muted">{body}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
+          );
+        })}
+      </SectionCard>
     </>
+  );
+}
+
+function HotkeyPreview({ value, recording }: { value: string; recording: boolean }) {
+  if (!value) return <Keycap muted>{recording ? "等待按键" : "未设置"}</Keycap>;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {value.split("+").map((part, index, parts) => (
+        <span key={`${part}-${index}`} className="flex items-center gap-2">
+          <Keycap>{part}</Keycap>
+          {index < parts.length - 1 ? <span className="text-text-muted">+</span> : null}
+        </span>
+      ))}
+    </div>
   );
 }

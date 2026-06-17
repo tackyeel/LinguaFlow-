@@ -1,4 +1,5 @@
 export type ThemeName = "light" | "dark" | "blue";
+export type TranslatorWindowMode = "normal" | "dynamicIsland";
 export type ProxyProtocol = "http" | "https" | "socks5";
 export type LanguageDetectEngine = "local" | "service" | "ai";
 export type AiReplyCopyFormat = "replyOnly" | "replyWithExplanation";
@@ -35,6 +36,8 @@ export interface TranslationSettings {
   focusResultAfterTranslate: boolean;
   autoCopyAiReply: boolean;
   aiReplyCopyFormat: AiReplyCopyFormat;
+  enableAiInTranslateWindow?: boolean;
+  resultOrder?: string[];
 }
 
 export interface HotkeyConfig {
@@ -49,6 +52,10 @@ export interface TranslateService {
   name: string;
   enabled: boolean;
   iconText: string;
+  provider?: string;
+  description?: string;
+  pluginPath?: string;
+  config?: Record<string, string>;
 }
 
 export interface AiService {
@@ -72,6 +79,9 @@ export interface OcrService {
   name: string;
   enabled: boolean;
   iconText: string;
+  provider?: string;
+  description?: string;
+  pluginPath?: string;
 }
 
 export interface ServicesConfig {
@@ -113,6 +123,7 @@ export interface AppConfig {
   listenPort: number;
   runtimePort: number | null;
   minTextLength: number;
+  translatorWindowMode: TranslatorWindowMode;
   proxy: ProxyConfig;
   translationSettings: TranslationSettings;
   hotkeys: HotkeyConfig;

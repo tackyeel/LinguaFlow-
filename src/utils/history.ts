@@ -28,3 +28,12 @@ export async function appendHistoryEntry(entry: Omit<HistoryEntry, "id" | "creat
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next, null, 2));
   return normalized;
 }
+
+export async function clearHistoryEntries() {
+  if (isTauriRuntime()) {
+    await invokeCommand<void>("clear_history");
+    return;
+  }
+
+  window.localStorage.setItem(STORAGE_KEY, "[]");
+}

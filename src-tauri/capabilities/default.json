@@ -2,6 +2,14 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default permissions for LinguaFlow desktop windows.",
-  "windows": ["settings", "translate", "hotkey-recorder", "screenshot-overlay"],
-  "permissions": ["core:default", "core:window:allow-set-always-on-top"]
+  "windows": ["settings", "translate", "dynamic-island", "hotkey-recorder", "screenshot-overlay"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-always-on-top",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-register-all",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-unregister-all"
+  ]
 }

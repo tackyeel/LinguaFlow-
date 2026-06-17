@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { Check, RotateCcw, X } from "lucide-react";
+import { Keyboard } from "lucide-react";
 import { Button } from "../ui/Button";
-import { WindowFrame } from "../ui/WindowFrame";
+import { Dialog, Keycap } from "../ui/Material";
 import { useConfigStore } from "../../stores/configStore";
 import type { HotkeyAction } from "../../types/config";
 import { eventToHotkey, findHotkeyConflict, getHotkeyActionLabel } from "../../utils/hotkeys";
@@ -14,48 +14,81 @@ export function HotkeyRecorderWindow() {
     []
   );
   const [value, setValue] = useState(config.hotkeys[action] ?? "");
-
   const conflict = value ? findHotkeyConflict(config.hotkeys, action, value) : null;
+  const parts = value ? value.split("+") : ["Ctrl", "Alt", "..."];
 
   return (
-    <WindowFrame title="设置快捷键" subtitle={getHotkeyActionLabel(action)}>
-      <div
-        className="grid h-full place-items-center p-5 outline-none"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          event.preventDefault();
-          const next = eventToHotkey(event);
-          if (next) setValue(next);
-        }}
-      >
-        <div className="w-full max-w-md rounded-lg border border-line/10 bg-panel p-5 shadow-glow">
-          <p className="text-sm text-muted">请按下新的快捷键组合</p>
-          <div className="my-5 grid h-20 place-items-center rounded-lg border border-line/10 bg-app font-mono text-2xl font-semibold text-primary">
-            {value || "等待按键"}
+    <div
+      className="drag-region h-screen w-screen"
+      tabIndex={0}
+      // eslint-disable-next-line jsx-a11y/no-autofocus
+      autoFocus
+      onKeyDown={(event) => {
+        event.preventDefault();
+        if (event.key === "Escape") {
+          setValue("");
+          return;
+        }
+        const next = eventToHotkey(event);
+        if (next) setValue(next);
+      }}
+    >
+      <Dialog className="no-drag max-w-[420px]">
+        <div className="px-6 pt-6">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-accent-soft text-accent">
+              <Keyboard size={19} />
+            </div>
+            <div>
+              <h1 className="text-xl font-medium text-text-primary">Record Shortcut</h1>
+              <p className="mt-1 text-sm text-text-secondary">{getHotkeyActionLabel(action)}</p>
+            </div>
           </div>
-          {conflict ? <p className="mb-4 rounded-md bg-danger/15 p-3 text-sm text-danger">该快捷键已被 {conflict} 占用</p> : null}
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" icon={<RotateCcw size={16} />} onClick={() => setValue("")}>
-              清除
-            </Button>
-            <Button variant="secondary" icon={<X size={16} />} onClick={() => void hideWindow("hotkey-recorder")}>
-              取消
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Check size={16} />}
-              disabled={Boolean(conflict)}
-              onClick={() =>
-                void updateConfig((draft) => {
-                  draft.hotkeys[action] = value;
-                }).then(() => hideWindow("hotkey-recorder"))
-              }
-            >
-              确认
-            </Button>
+
+          <div className="mt-6 rounded-2xl bg-[#F7FAFF] p-5 text-center">
+            <p className="text-sm text-text-secondary">按下你想使用的快捷键组合</p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+              {parts.map((part, index) => (
+                <span key={`${part}-${index}`} className="flex items-center gap-2">
+                  <Keycap muted={part === "..."}>{part}</Keycap>
+                  {index < parts.length - 1 ? <span className="text-lg text-text-secondary">+</span> : null}
+                </span>
+              ))}
+            </div>
+            <p className="mt-5 text-xs leading-5 text-text-muted">
+              按 Esc 清除。组合键建议包含 Ctrl、Alt 或 Shift。
+            </p>
+          </div>
+
+          <div className="mt-4 min-h-6 text-center">
+            {conflict ? (
+              <p className="text-sm font-medium text-danger">该快捷键已被 {conflict} 占用</p>
+            ) : (
+              <p className="text-sm text-text-secondary">{value ? "快捷键可用" : "等待按键输入"}</p>
+            )}
           </div>
         </div>
-      </div>
-    </WindowFrame>
+
+        <div className="mt-5 flex justify-end gap-2 border-t border-border-subtle bg-[#FBFBFF] px-6 py-4">
+          <Button variant="ghost" onClick={() => void hideWindow("hotkey-recorder")}>
+            取消
+          </Button>
+          <Button variant="secondary" onClick={() => setValue("")}>
+            清除
+          </Button>
+          <Button
+            variant="primary"
+            disabled={Boolean(conflict) || !value}
+            onClick={() =>
+              void updateConfig((draft) => {
+                draft.hotkeys[action] = value;
+              }).then(() => hideWindow("hotkey-recorder"))
+            }
+          >
+            确认
+          </Button>
+        </div>
+      </Dialog>
+    </div>
   );
 }

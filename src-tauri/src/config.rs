@@ -1,7 +1,8 @@
 use serde_json::{json, Value};
 use std::{fs, path::PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
+#[allow(dead_code)]
 const DEFAULT_TRANSLATION_PROMPT: &str = r#"你是一个专业的聊天语境翻译引擎，不是普通机器翻译。
 
 你的任务：
@@ -35,6 +36,7 @@ const DEFAULT_TRANSLATION_PROMPT: &str = r#"你是一个专业的聊天语境翻
 【直译参考】
 给一个接近原文结构的直译，方便用户对照理解。"#;
 
+#[allow(dead_code)]
 const DEFAULT_REPLY_PROMPT: &str = r#"你是一个自然聊天回复助手，目标是把用户想表达的中文意思改写成自然、地道、不像机器翻译的外语回复。
 
 你的任务：
@@ -69,6 +71,61 @@ const DEFAULT_REPLY_PROMPT: &str = r#"你是一个自然聊天回复助手，目
 【意思解释】
 用中文解释这些回复大概是什么意思。"#;
 
+const DEFAULT_TRANSLATION_PROMPT_V2: &str = r#"你是一个专业的聊天语境翻译引擎，不是普通机器翻译。
+
+你的任务：
+1. 根据用户输入内容，判断源语言。
+2. 将内容翻译成目标语言。
+3. 优先保留真实聊天语气，而不是逐字直译。
+4. 遇到脏话、挑衅、阴阳怪气、玩笑、暧昧表达时，要解释真实语气。
+5. 不要把所有内容翻译得过于正式。
+6. 不要擅自美化原文，不要把攻击性内容洗白。
+7. 不要输出无关废话。
+
+输入信息：
+* 源语言：{{source_language}}
+* 目标语言：{{target_language}}
+* 用户文本：{{text}}
+* 使用场景：{{scene}}
+
+输出格式必须为：
+
+【自然翻译】
+用目标语言自然翻译原文。
+
+【语气解释】
+解释这句话的语气、情绪、潜台词。没有特别语气就写“普通表达”。
+
+【代替回复】
+如果用户需要回复对方，给出一个自然、可直接发送的目标语言回复；如果原文不适合回复，就写“无”。"#;
+
+const DEFAULT_REPLY_PROMPT_V2: &str = r#"你是一个自然聊天回复助手，目标是把用户想表达的意思改写成自然、地道、不像机器翻译的外语回复。
+
+你的任务：
+1. 根据对方原文理解聊天上下文。
+2. 根据用户想表达的意思，生成目标语言回复。
+3. 回复要自然、口语化，像真实网友聊天。
+4. 至少给出两种不同回复。
+5. 不要加入用户没有表达过的新信息。
+
+输入信息：
+* 对方原文：{{context_text}}
+* 用户想表达：{{user_intent}}
+* 目标语言：{{target_language}}
+* 回复风格：{{reply_style}}
+* 是否需要简短：{{short_mode}}
+
+输出格式必须为：
+
+【推荐回复】
+最自然、最推荐直接发送的一句。
+
+【更随便一点】
+更口语、更像网友聊天的版本。
+
+【更礼貌一点】
+语气更稳一点的版本。"#;
+
 #[tauri::command]
 pub fn get_config(app: AppHandle) -> Result<Value, String> {
   read_config_value(&app)
@@ -76,7 +133,9 @@ pub fn get_config(app: AppHandle) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn save_config(app: AppHandle, config: Value) -> Result<Value, String> {
-  save_config_value(&app, config)
+  let saved = save_config_value(&app, config)?;
+  let _ = app.emit("config:updated", saved.clone());
+  Ok(saved)
 }
 
 #[tauri::command]
@@ -84,7 +143,9 @@ pub fn complete_setup(app: AppHandle, config: Value) -> Result<Value, String> {
   let mut next = config;
   next["firstRun"] = Value::Bool(false);
   next["setupCompleted"] = Value::Bool(true);
-  save_config_value(&app, next)
+  let saved = save_config_value(&app, next)?;
+  let _ = app.emit("config:updated", saved.clone());
+  Ok(saved)
 }
 
 #[tauri::command]
@@ -171,7 +232,7 @@ fn default_config() -> Value {
   json!({
     "firstRun": true,
     "setupCompleted": false,
-    "theme": "dark",
+    "theme": "light",
     "startup": false,
     "trayOnlyOnLaunch": true,
     "animations": true,
@@ -181,6 +242,7 @@ fn default_config() -> Value {
     "listenPort": 60828,
     "runtimePort": null,
     "minTextLength": 2,
+    "translatorWindowMode": "normal",
     "proxy": {
       "enabled": false,
       "protocol": "http",
@@ -245,8 +307,8 @@ fn default_config() -> Value {
       "shortMode": true,
       "enableAiReply": true,
       "autoCopyAiReply": false,
-      "translationPrompt": DEFAULT_TRANSLATION_PROMPT,
-      "replyPrompt": DEFAULT_REPLY_PROMPT
+      "translationPrompt": DEFAULT_TRANSLATION_PROMPT_V2,
+      "replyPrompt": DEFAULT_REPLY_PROMPT_V2
     },
     "ocrSettings": {
       "defaultEngine": "system-ocr",

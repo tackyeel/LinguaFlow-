@@ -31,6 +31,36 @@ export async function hideWindow(label?: string) {
   await invokeCommand("hide_window", { label: label ?? null });
 }
 
+export async function resizeDynamicIslandWindow(expanded: boolean) {
+  if (!isTauriRuntime()) return;
+
+  await invokeCommand("resize_dynamic_island_window", { expanded });
+}
+
+export async function switchTranslatorWindowMode(mode: "normal" | "dynamicIsland") {
+  if (!isTauriRuntime()) {
+    const label = mode === "dynamicIsland" ? "dynamic-island" : "translate";
+    const url = new URL(window.location.href);
+    url.searchParams.set("window", label);
+    window.open(url.toString(), label, mode === "dynamicIsland" ? "width=550,height=330" : "width=420,height=530");
+    return;
+  }
+
+  await invokeCommand("switch_translator_window_mode", { mode });
+}
+
+export async function minimizeWindow() {
+  if (!isTauriRuntime()) return;
+
+  await invokeCommand("minimize_window");
+}
+
+export async function toggleMaximizeWindow() {
+  if (!isTauriRuntime()) return;
+
+  await invokeCommand("toggle_maximize_window");
+}
+
 export async function getCurrentWindowLabel() {
   if (!isTauriRuntime()) {
     return new URLSearchParams(window.location.search).get("window") ?? "settings";
