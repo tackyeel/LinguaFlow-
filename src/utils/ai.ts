@@ -24,6 +24,20 @@ export interface AiReplyRequest {
   shortMode: boolean;
 }
 
+export interface AiImageTranslateRequest {
+  providerId?: string;
+  imageDataUrl: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+}
+
+export interface CapturedScreenshot {
+  imageDataUrl: string;
+  width: number;
+  height: number;
+  ocrText: string;
+}
+
 export async function testAiProvider(provider: AiService) {
   validateProvider(provider);
   if (!isTauriRuntime()) {
@@ -65,6 +79,26 @@ export async function runAiReply(request: AiReplyRequest) {
   }
 
   return invokeCommand<AiCallResult>("ai_reply", { request });
+}
+
+export async function captureScreenClip() {
+  if (!isTauriRuntime()) {
+    throw new Error("截图识图需要在 Tauri 应用中运行；浏览器预览无法启动系统截图。");
+  }
+
+  return invokeCommand<CapturedScreenshot>("capture_screen_clip");
+}
+
+export async function runAiImageTranslate(request: AiImageTranslateRequest) {
+  if (!request.imageDataUrl.trim()) {
+    throw new Error("截图为空，请先完成截图。");
+  }
+
+  if (!isTauriRuntime()) {
+    throw new Error("真实 AI 识图需要在 Tauri 应用中运行；浏览器预览不会发送 API Key。");
+  }
+
+  return invokeCommand<AiCallResult>("ai_translate_image", { request });
 }
 
 function validateProvider(provider: AiService) {

@@ -5,7 +5,7 @@ import { DynamicIslandPanel } from "./DynamicIslandPanel";
 import { useTranslatorEngine, type TranslatorStatus } from "../../hooks/useTranslatorEngine";
 import { hideWindow, resizeDynamicIslandWindow, switchTranslatorWindowMode } from "../../utils/tauri";
 
-type TabId = "translation" | "explanation" | "reply";
+type TabId = "translation" | "explanation" | "reply" | "vision";
 
 export function DynamicIslandWindow() {
   const engine = useTranslatorEngine();
@@ -16,7 +16,7 @@ export function DynamicIslandWindow() {
   const resizeTimerRef = useRef<number>();
 
   const status = useMemo<TranslatorStatus>(() => {
-    if (engine.running) return "translating";
+    if (engine.running && !engine.completed) return "translating";
     if (engine.error) return "error";
     if (engine.completed) return "success";
     if (expanded) return "expanded";
@@ -45,7 +45,13 @@ export function DynamicIslandWindow() {
   }, [expanded]);
 
   const primaryCopyText =
-    activeTab === "reply" ? engine.aiReplyText : activeTab === "explanation" ? engine.aiExplanationText : engine.translationText;
+    activeTab === "vision"
+      ? engine.imageTranslationText
+      : activeTab === "reply"
+        ? engine.aiReplyText
+        : activeTab === "explanation"
+          ? engine.aiExplanationText
+          : engine.translationText;
 
   const switchToNormal = async () => {
     await engine.updateConfig((draft) => {
@@ -131,17 +137,23 @@ export function DynamicIslandWindow() {
               translationText={engine.translationText}
               aiExplanationText={engine.aiExplanationText}
               aiReplyText={engine.aiReplyText}
+              imageTranslationText={engine.imageTranslationText}
+              imageTranslationPreview={engine.imageTranslationPreview}
+              imageTranslationSize={engine.imageTranslationSize}
               error={engine.error}
-              running={engine.running}
               onCopy={() => void engine.copy(primaryCopyText)}
               onClear={engine.clearAll}
+              onImageTranslate={() => {
+                setActiveTab("vision");
+                void engine.performImageTranslate();
+              }}
               onExplain={() => {
                 setActiveTab("explanation");
                 void engine.performTranslate();
               }}
               onReply={() => {
                 setActiveTab("reply");
-                void engine.performTranslate();
+                void engine.performTranslate(undefined, { forceAiReply: true });
               }}
             />
           ) : null}

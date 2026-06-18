@@ -14,7 +14,7 @@ import type { AppConfig } from "../types/config";
 type WindowLabel = "settings" | "translate" | "dynamic-island" | "hotkey-recorder" | "screenshot-overlay";
 
 export function App() {
-  const [label, setLabel] = useState<WindowLabel>("settings");
+  const [label, setLabel] = useState<WindowLabel | null>(null);
   const { config, loading, loadConfig, syncConfig } = useConfigStore();
   const { language } = useUiLanguageStore();
 
@@ -57,7 +57,7 @@ export function App() {
     return () => dispose();
   }, [config.hotkeys, label]);
 
-  if (loading) {
+  if (loading || !label) {
     return (
       <div className="grid h-full place-items-center bg-app text-muted">
         <div className="flex items-center gap-3 rounded-2xl border border-border-subtle bg-surface px-5 py-4 text-sm text-text-secondary shadow-sm">

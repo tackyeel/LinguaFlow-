@@ -3,6 +3,7 @@ mod clipboard;
 mod config;
 mod history;
 mod hotkey;
+mod screenshot;
 mod server;
 mod tray;
 mod window;
@@ -19,12 +20,14 @@ pub fn run() {
       config::config_file_path,
       ai::test_ai_provider,
       ai::ai_translate,
+      ai::ai_translate_image,
       ai::ai_reply,
       clipboard::ignore_clipboard_text,
       clipboard::set_clipboard_text,
       history::get_history,
       history::append_history,
       history::clear_history,
+      screenshot::capture_screen_clip,
       window::show_window,
       window::hide_window,
       window::resize_dynamic_island_window,

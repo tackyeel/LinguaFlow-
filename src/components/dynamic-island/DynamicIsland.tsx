@@ -51,14 +51,17 @@ export function DynamicIsland({
             transition={{ duration: 0.18 }}
           >
             {engine.copyNotice ? <div className="dynamic-island-copy-notice">{engine.copyNotice}</div> : null}
-            <input
+            <textarea
               className="dynamic-island-input"
               value={engine.sourceText}
               placeholder="输入或粘贴要翻译的内容..."
               onChange={(event) => engine.setSourceText(event.target.value)}
               onFocus={onExpand}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void engine.performTranslate();
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void engine.performTranslate();
+                }
                 if (event.key === "Escape") onCollapse();
               }}
             />

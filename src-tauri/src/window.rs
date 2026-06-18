@@ -4,7 +4,7 @@ use crate::config;
 
 const WINDOW_LABELS: [&str; 5] = ["settings", "translate", "dynamic-island", "hotkey-recorder", "screenshot-overlay"];
 const DYNAMIC_ISLAND_COLLAPSED: (u32, u32) = (340, 64);
-const DYNAMIC_ISLAND_EXPANDED: (u32, u32) = (724, 342);
+const DYNAMIC_ISLAND_EXPANDED: (u32, u32) = (724, 410);
 const TRANSPARENT: Color = Color(0, 0, 0, 0);
 
 pub fn apply_startup_visibility(app: &AppHandle) -> Result<(), String> {

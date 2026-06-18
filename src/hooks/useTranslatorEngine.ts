@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useConfigStore } from "../stores/configStore";
-import { runAiReply, runAiTranslate } from "../utils/ai";
+import { captureScreenClip, runAiImageTranslate, runAiReply, runAiTranslate } from "../utils/ai";
 import { appendHistoryEntry } from "../utils/history";
 import { invokeCommand, isTauriRuntime, listenToTauriEvent } from "../utils/tauri";
 import { translateWithService, type ServiceTranslateResult } from "../utils/translateServices";
@@ -22,6 +22,17 @@ export interface ReplySections {
   meaning: string;
 }
 
+export interface ImageTranslationSections {
+  description: string;
+  recognized: string;
+  translated: string;
+  note: string;
+}
+
+interface TranslateOptions {
+  forceAiReply?: boolean;
+}
+
 export function useTranslatorEngine() {
   const { config, updateConfig } = useConfigStore();
   const settings = config.translationSettings;
@@ -29,11 +40,18 @@ export function useTranslatorEngine() {
   const [translationText, setTranslationText] = useState("");
   const [aiExplanationText, setAiExplanationText] = useState("");
   const [aiReplyText, setAiReplyText] = useState("");
+  const [imageTranslationText, setImageTranslationText] = useState("");
+  const [imageTranslationPreview, setImageTranslationPreview] = useState("");
+  const [imageTranslationSize, setImageTranslationSize] = useState("");
   const [error, setError] = useState("");
-  const [running, setRunning] = useState(false);
+  const [translationRunning, setTranslationRunning] = useState(false);
+  const [aiExplanationRunning, setAiExplanationRunning] = useState(false);
+  const [aiReplyRunning, setAiReplyRunning] = useState(false);
+  const [imageTranslationRunning, setImageTranslationRunning] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [copyNotice, setCopyNotice] = useState("");
   const requestIdRef = useRef(0);
+  const imageRequestIdRef = useRef(0);
   const ignoredClipboardTextRef = useRef("");
 
   const enabledServices = useMemo(
@@ -41,6 +59,7 @@ export function useTranslatorEngine() {
     [config.services.translate]
   );
   const aiEnabled = settings.enableAiInTranslateWindow ?? true;
+  const running = translationRunning || aiExplanationRunning || aiReplyRunning || imageTranslationRunning;
 
   useEffect(() => {
     if (!completed) return;
@@ -78,7 +97,9 @@ export function useTranslatorEngine() {
       setAiExplanationText("");
       setAiReplyText("");
       setError("");
-      setRunning(false);
+      setTranslationRunning(false);
+      setAiExplanationRunning(false);
+      setAiReplyRunning(false);
       setCompleted(false);
       setCopyNotice("");
       return;
@@ -103,12 +124,15 @@ export function useTranslatorEngine() {
     enabledServices.map((service) => `${service.id}:${service.provider}:${service.enabled}:${JSON.stringify(service.config ?? {})}`).join("|")
   ]);
 
-  const performTranslate = async (text = sourceText.trim()) => {
+  const performTranslate = async (text = sourceText.trim(), options: TranslateOptions = {}) => {
     if (!text) return;
+    const shouldRunAiReply = config.aiSettings.enableAiReply || Boolean(options.forceAiReply);
 
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
-    setRunning(true);
+    setTranslationRunning(enabledServices.length > 0);
+    setAiExplanationRunning(aiEnabled);
+    setAiReplyRunning(aiEnabled && shouldRunAiReply);
     setCompleted(false);
     setError("");
     setTranslationText("");
@@ -127,6 +151,7 @@ export function useTranslatorEngine() {
       if (requestId !== requestIdRef.current) return null;
       if (result.ok && result.content.trim()) {
         successCount += 1;
+        setCompleted(true);
         void appendHistoryEntry({
           type: "translation",
           sourceText: text,
@@ -145,9 +170,10 @@ export function useTranslatorEngine() {
     const markSuccess = () => {
       successCount += 1;
     };
-    const aiJob = aiEnabled ? runAiJobs(requestId, text, markSuccess, errors) : Promise.resolve();
+    const aiJob = aiEnabled ? runAiJobs(requestId, text, markSuccess, errors, shouldRunAiReply) : Promise.resolve();
     const [serviceSettled, aiSettled] = await Promise.all([Promise.allSettled(serviceJobs), Promise.allSettled([aiJob])]);
     if (requestId !== requestIdRef.current) return;
+    setTranslationRunning(false);
 
     const serviceResults = serviceSettled
       .filter((item): item is PromiseFulfilledResult<NonNullable<Awaited<(typeof serviceJobs)[number]>>> => item.status === "fulfilled" && Boolean(item.value))
@@ -168,11 +194,10 @@ export function useTranslatorEngine() {
     } else {
       setError("");
     }
-    setRunning(false);
     setCompleted(Boolean(text.trim()));
   };
 
-  const runAiJobs = async (requestId: number, text: string, markSuccess: () => void, errors: string[]) => {
+  const runAiJobs = async (requestId: number, text: string, markSuccess: () => void, errors: string[], shouldRunAiReply: boolean) => {
     const jobs: Promise<void>[] = [];
 
     jobs.push((async () => {
@@ -187,6 +212,8 @@ export function useTranslatorEngine() {
       const natural = extractNaturalTranslation(aiResult.content);
       markSuccess();
       setAiExplanationText(aiResult.content);
+      setAiExplanationRunning(false);
+      setCompleted(true);
       if (enabledServices.length === 0) {
         setTranslationText((current) => current || natural || aiResult.content);
       }
@@ -201,10 +228,11 @@ export function useTranslatorEngine() {
       });
     })().catch((caught) => {
       if (requestId !== requestIdRef.current) return;
+      setAiExplanationRunning(false);
       errors.push(caught instanceof Error ? caught.message : String(caught));
     }));
 
-    if (config.aiSettings.enableAiReply) {
+    if (shouldRunAiReply) {
       jobs.push((async () => {
         const replyResult = await runAiReply({
           providerId: config.aiSettings.defaultServiceId,
@@ -218,6 +246,8 @@ export function useTranslatorEngine() {
         const replyToCopy = selectReplyForCopy(replyResult.content, settings.aiReplyCopyFormat);
         markSuccess();
         setAiReplyText(replyResult.content);
+        setAiReplyRunning(false);
+        setCompleted(true);
         void appendHistoryEntry({
           type: "ai_reply",
           sourceText: text,
@@ -234,21 +264,109 @@ export function useTranslatorEngine() {
         }
       })().catch((caught) => {
         if (requestId !== requestIdRef.current) return;
+        setAiReplyRunning(false);
         errors.push(caught instanceof Error ? caught.message : String(caught));
       }));
+    } else {
+      setAiReplyRunning(false);
     }
 
     await Promise.allSettled(jobs);
   };
 
+  const performImageTranslate = async () => {
+    const requestId = imageRequestIdRef.current + 1;
+    imageRequestIdRef.current = requestId;
+    setImageTranslationRunning(true);
+    setImageTranslationText("");
+    setImageTranslationPreview("");
+    setImageTranslationSize("");
+    setError("");
+    setCompleted(false);
+
+    try {
+      const screenshot = await captureScreenClip();
+      if (requestId !== imageRequestIdRef.current) return;
+      setImageTranslationPreview(screenshot.imageDataUrl);
+      setImageTranslationSize(`${screenshot.width} x ${screenshot.height}`);
+
+      const ocrText = screenshot.ocrText.trim();
+      if (ocrText) {
+        setImageTranslationText(
+          `【识别文字】\n${ocrText}\n\n【翻译结果】\n正在翻译 OCR 文本...\n\n【备注】\n已先使用 Windows 本地 OCR 提取文字。`
+        );
+        const result = await runAiTranslate({
+          providerId: config.aiSettings.visionServiceId || config.aiSettings.defaultServiceId,
+          sourceText: ocrText,
+          sourceLanguage: settings.sourceLanguage,
+          targetLanguage: settings.targetLanguage,
+          scene: "ocr-text"
+        });
+        if (requestId !== imageRequestIdRef.current) return;
+        const sections = parseTranslationSections(result.content);
+        const translated = sections.natural || result.content;
+        const note = [
+          "已先使用 Windows 本地 OCR 提取文字，再交给 AI 翻译。",
+          sections.tone ? `语气说明：${sections.tone}` : ""
+        ].filter(Boolean).join("\n");
+        setImageTranslationText(`【识别文字】\n${ocrText}\n\n【翻译结果】\n${translated}\n\n【备注】\n${note}`);
+        setCompleted(true);
+        void appendHistoryEntry({
+          type: "ai_image_translate",
+          sourceText: ocrText,
+          resultText: translated,
+          sourceLanguage: settings.sourceLanguage,
+          targetLanguage: settings.targetLanguage,
+          serviceName: result.serviceName || "AI OCR 翻译",
+          isFavorite: false
+        });
+        return;
+      }
+
+      const result = await runAiImageTranslate({
+        providerId: config.aiSettings.visionServiceId || config.aiSettings.defaultServiceId,
+        imageDataUrl: screenshot.imageDataUrl,
+        sourceLanguage: settings.sourceLanguage,
+        targetLanguage: settings.targetLanguage
+      });
+      if (requestId !== imageRequestIdRef.current) return;
+      setImageTranslationText(result.content);
+      setCompleted(true);
+      void appendHistoryEntry({
+        type: "ai_image_translate",
+        sourceText: `截图识图 ${screenshot.width}x${screenshot.height}`,
+        resultText: result.content,
+        sourceLanguage: settings.sourceLanguage,
+        targetLanguage: settings.targetLanguage,
+        serviceName: result.serviceName || "AI 识图",
+        isFavorite: false
+      });
+    } catch (caught) {
+      if (requestId !== imageRequestIdRef.current) return;
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      if (requestId === imageRequestIdRef.current) {
+        setImageTranslationRunning(false);
+        setCompleted(true);
+      }
+    }
+  };
+
   const clearAll = () => {
     requestIdRef.current += 1;
+    imageRequestIdRef.current += 1;
     setSourceText("");
     setTranslationText("");
     setAiExplanationText("");
     setAiReplyText("");
+    setImageTranslationText("");
+    setImageTranslationPreview("");
+    setImageTranslationSize("");
     setError("");
-    setRunning(false);
+    setTranslationRunning(false);
+    setAiExplanationRunning(false);
+    setAiReplyRunning(false);
+    setImageTranslationRunning(false);
     setCompleted(false);
     setCopyNotice("");
   };
@@ -280,12 +398,20 @@ export function useTranslatorEngine() {
     translationText,
     aiExplanationText,
     aiReplyText,
+    imageTranslationText,
+    imageTranslationPreview,
+    imageTranslationSize,
     error,
     running,
+    translationRunning,
+    aiExplanationRunning,
+    aiReplyRunning,
+    imageTranslationRunning,
     completed,
     copyNotice,
     aiEnabled,
     performTranslate,
+    performImageTranslate,
     clearAll,
     copy,
     toggleAi,
@@ -312,16 +438,29 @@ export function parseReplySections(content: string): ReplySections {
   };
 }
 
+export function parseImageTranslationSections(content: string): ImageTranslationSections {
+  return {
+    description: extractSection(content, ["Image content", "图片内容"]),
+    recognized: extractSection(content, ["Recognized text", "OCR text", "识别文字"]),
+    translated: extractSection(content, ["Translation", "Translated result", "翻译结果"]),
+    note: extractSection(content, ["Notes", "Remark", "备注"])
+  };
+}
+
 function extractNaturalTranslation(content: string) {
   return parseTranslationSections(content).natural;
 }
 
 function extractSection(content: string, titles: string[]) {
+  const headingTitles =
+    "Natural translation|Tone explanation|Slang / difficult words|Literal reference|Recommended reply|Casual reply|More casual|Polite reply|More polite|Meaning explanation|Image content|Recognized text|OCR text|Translation|Translated result|Notes|Remark|自然翻译|推荐翻译|语气解释|难懂词|梗解释|直译参考|推荐回复|更随便一点|更礼貌一点|意思解释|图片内容|识别文字|翻译结果|备注";
+  const nextSection = `\\n\\s*(?:【|\\[(?:${headingTitles})\\]|(?:${headingTitles})\\s*[:：])`;
+
   for (const title of titles) {
     const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const patterns = [
-      new RegExp(`(?:【${escaped}】|\\[${escaped}\\]|${escaped}\\s*[:：])\\s*([\\s\\S]*?)(?=\\n\\s*(?:【|\\[|[A-Z][A-Za-z /]+\\s*[:：])|$)`, "i"),
-      new RegExp(`${escaped}\\s*\\n+([\\s\\S]*?)(?=\\n\\s*(?:【|\\[|[A-Z][A-Za-z /]+\\s*[:：])|$)`, "i")
+      new RegExp(`(?:【${escaped}】|\\[${escaped}\\]|${escaped}\\s*[:：])\\s*([\\s\\S]*?)(?=${nextSection}|$)`, "i"),
+      new RegExp(`${escaped}\\s*\\n+([\\s\\S]*?)(?=${nextSection}|$)`, "i")
     ];
     for (const pattern of patterns) {
       const match = content.match(pattern);

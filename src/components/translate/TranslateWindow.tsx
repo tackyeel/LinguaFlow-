@@ -5,6 +5,7 @@ import { Button } from "../ui/Button";
 import { Select, Switch, Toast } from "../ui/Material";
 import { MAINSTREAM_LANGUAGES, TARGET_LANGUAGES } from "../../constants/languages";
 import { useConfigStore } from "../../stores/configStore";
+import { getActiveAiModelName } from "../../utils/aiModel";
 import { runAiReply, runAiTranslate } from "../../utils/ai";
 import { appendHistoryEntry } from "../../utils/history";
 import { hideWindow, invokeCommand, isTauriRuntime, listenToTauriEvent, setAlwaysOnTop, switchTranslatorWindowMode } from "../../utils/tauri";
@@ -42,6 +43,7 @@ export function TranslateWindow() {
     [config.services.translate]
   );
   const aiEnabled = settings.enableAiInTranslateWindow ?? true;
+  const aiModelName = useMemo(() => getActiveAiModelName(config), [config]);
   const resultOrder = localResultOrder.length ? localResultOrder : settings.resultOrder ?? [];
 
   const displayedPanels = useMemo(() => {
@@ -52,10 +54,11 @@ export function TranslateWindow() {
     });
 
     if (aiEnabled) {
+      const aiPanel = resultById.get("ai");
       basePanels.push(
-        resultById.get("ai") ?? {
+        aiPanel ? { ...aiPanel, name: aiModelName } : {
           id: "ai",
-          name: "AI 专属翻译",
+          name: aiModelName,
           iconText: "AI",
           content: "",
           ai: true
@@ -76,7 +79,7 @@ export function TranslateWindow() {
     }
 
     return sortPanels(basePanels, resultOrder);
-  }, [aiEnabled, config.aiSettings.enableAiReply, enabledServices, panels, resultOrder]);
+  }, [aiEnabled, aiModelName, config.aiSettings.enableAiReply, enabledServices, panels, resultOrder]);
 
   useEffect(() => {
     void setAlwaysOnTop(settings.alwaysOnTop);
@@ -148,7 +151,7 @@ export function TranslateWindow() {
 
     const loadingPanels = enabledServices.map((service) => serviceToPanel(service, true));
     if (aiEnabled) {
-      loadingPanels.push({ id: "ai", name: "AI 专属翻译", iconText: "AI", content: "", loading: true, ai: true });
+      loadingPanels.push({ id: "ai", name: aiModelName, iconText: "AI", content: "", loading: true, ai: true });
       if (config.aiSettings.enableAiReply) {
         loadingPanels.push({
           id: "ai-reply",
@@ -203,7 +206,7 @@ export function TranslateWindow() {
       const cleaned = formatAiTranslation(aiResult.content);
       updatePanel(requestId, {
         id: "ai",
-        name: "AI 专属翻译",
+        name: aiModelName,
         iconText: "AI",
         content: cleaned,
         ai: true
@@ -214,13 +217,13 @@ export function TranslateWindow() {
         resultText: cleaned,
         sourceLanguage: settings.sourceLanguage,
         targetLanguage: settings.targetLanguage,
-        serviceName: aiResult.serviceName || "AI 专属翻译",
+        serviceName: aiResult.serviceName || aiModelName,
         isFavorite: false
       });
     })().catch((error) => {
       updatePanel(requestId, {
         id: "ai",
-        name: "AI 专属翻译",
+        name: aiModelName,
         iconText: "AI",
         content: "",
         error: error instanceof Error ? error.message : String(error),
@@ -634,9 +637,13 @@ function formatAiReplies(content: string) {
 }
 
 function extractSection(content: string, titles: string[]) {
+  const headingTitles =
+    "Natural translation|Tone explanation|Slang / difficult words|Literal reference|Recommended reply|Casual reply|More casual|Polite reply|More polite|Meaning explanation|自然翻译|推荐翻译|语气解释|难懂词|梗解释|直译参考|推荐回复|更随便一点|更礼貌一点|意思解释|代替回复|AI 代替回复|Reply";
+  const nextSection = `\\n\\s*(?:【|\\[(?:${headingTitles})\\]|(?:${headingTitles})\\s*[:：])`;
+
   for (const title of titles) {
     const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`(?:【${escaped}】|\\[${escaped}\\])\\s*([\\s\\S]*?)(?=\\n\\s*(?:【|\\[)|$)`, "i");
+    const pattern = new RegExp(`(?:【${escaped}】|\\[${escaped}\\])\\s*([\\s\\S]*?)(?=${nextSection}|$)`, "i");
     const match = content.match(pattern);
     if (match?.[1]?.trim()) return match[1].trim();
   }

@@ -15,6 +15,8 @@ export interface ServiceTranslateResult {
   error?: string;
 }
 
+const TRANSLATE_TIMEOUT_MS = 8000;
+
 export async function translateWithService({
   service,
   sourceText,
@@ -75,7 +77,7 @@ async function googleTranslate(text: string, sourceLanguage: string, targetLangu
   url.searchParams.set("dt", "t");
   url.searchParams.set("q", text);
 
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = (await response.json()) as unknown;
   const translated = Array.isArray(data) && Array.isArray(data[0])
@@ -91,7 +93,7 @@ async function lingvaTranslate(service: TranslateService, text: string, sourceLa
   const target = normalizeLanguage(targetLanguage);
   const url = `${endpoint}/api/v1/${encodeURIComponent(source)}/${encodeURIComponent(target)}/${encodeURIComponent(text)}`;
 
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = (await response.json()) as { translation?: string };
   if (!data.translation?.trim()) throw new Error("没有返回翻译结果");
@@ -101,6 +103,22 @@ async function lingvaTranslate(service: TranslateService, text: string, sourceLa
 function normalizeLanguage(language: string) {
   if (language === "zh-CN") return "zh";
   return language;
+}
+
+async function fetchWithTimeout(url: string | URL) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("翻译服务请求超时，请检查网络或代理。");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 function requiredFields(provider: string) {

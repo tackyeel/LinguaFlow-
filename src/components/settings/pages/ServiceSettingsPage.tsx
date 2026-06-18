@@ -1,9 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Bot, CheckCircle2, Eye, Languages, Plus, Puzzle, TestTube2, Trash2, Upload, X } from "lucide-react";
+import { Bot, CheckCircle2, ChevronDown, ChevronRight, Eye, Languages, Plus, Puzzle, TestTube2, Trash2, Upload, X } from "lucide-react";
 import { AI_PROVIDER_PRESETS, MAINSTREAM_LANGUAGES, TARGET_LANGUAGES } from "../../../constants/languages";
 import { useConfigStore } from "../../../stores/configStore";
-import type { AiProviderType, OcrService, ReplyStyle, TranslateService } from "../../../types/config";
+import type { AiProviderType, AiService, OcrService, ReplyStyle, TranslateService } from "../../../types/config";
 import { testAiProvider } from "../../../utils/ai";
 import { cn } from "../../../utils/cn";
 import { Button } from "../../ui/Button";
@@ -12,7 +12,6 @@ import {
   PageHeader,
   PasswordInput,
   PromptEditor,
-  ProviderCard,
   SectionCard,
   SegmentedControl,
   Select,
@@ -239,14 +238,9 @@ function TranslateServiceRow({ service, index }: { service: TranslateService; in
 }
 
 function AiServicesTab() {
-  const { config, updateConfig, loadConfig } = useConfigStore();
+  const { config, updateConfig } = useConfigStore();
   const [selectedProvider, setSelectedProvider] = useState("OpenAI");
-  const [selectedId, setSelectedId] = useState(config.aiSettings.defaultServiceId || config.services.ai[0]?.id || "");
-  const [testing, setTesting] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageOk, setMessageOk] = useState<boolean | null>(null);
-  const selectedIndex = useMemo(() => Math.max(0, config.services.ai.findIndex((service) => service.id === selectedId)), [config.services.ai, selectedId]);
-  const service = config.services.ai[selectedIndex];
+  const [expandedId, setExpandedId] = useState(config.aiSettings.defaultServiceId || config.services.ai[0]?.id || "");
 
   const addProvider = () => void updateConfig((draft) => {
     const providerType = providerTypeForPreset(selectedProvider);
@@ -265,12 +259,121 @@ function AiServicesTab() {
       useProxy: false,
       customHeaders: ""
     });
-    draft.aiSettings.defaultServiceId = id;
-    setSelectedId(id);
+    draft.aiSettings.defaultServiceId ||= id;
+    draft.aiSettings.visionServiceId ||= id;
+    setExpandedId(id);
   });
 
+  return (
+    <div className="space-y-6">
+      <SectionCard title="模型管理" description="像控制台一样管理 AI Provider。默认折叠，只展开正在调整的模型。" icon={<Bot size={18} />}>
+        <div className="flex flex-col gap-3 border-b border-border-subtle px-5 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-text-primary">AI 模型列表</div>
+            <div className="mt-1 text-xs text-text-secondary">
+              共 {config.services.ai.length} 个 Provider。AI 解释和 AI 回复共用文本模型，AI 识图可单独选择识图模型。
+            </div>
+          </div>
+          <div className="flex min-w-0 gap-2">
+            <Select className="h-9 min-w-0 flex-1 md:w-56" value={selectedProvider} onChange={(event) => setSelectedProvider(event.target.value)}>
+              {AI_PROVIDER_PRESETS.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+              <option value="CustomProvider">Custom</option>
+            </Select>
+            <Button icon={<Plus size={16} />} onClick={addProvider}>添加模型</Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 border-b border-border-subtle bg-surface-hover/40 px-5 py-4 md:grid-cols-2 md:px-6">
+          <label className="space-y-2">
+            <span className="text-xs font-semibold text-text-secondary">文本模型（AI 解释 / AI 回复）</span>
+            <Select
+              value={config.aiSettings.defaultServiceId}
+              onChange={(event) => void updateConfig((draft) => {
+                draft.aiSettings.defaultServiceId = event.target.value;
+              })}
+            >
+              {config.services.ai.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name || service.provider} · {service.model || "未填写模型"}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="space-y-2">
+            <span className="text-xs font-semibold text-text-secondary">识图模型（AI 识图 / OCR 后翻译）</span>
+            <Select
+              value={config.aiSettings.visionServiceId || config.aiSettings.defaultServiceId}
+              onChange={(event) => void updateConfig((draft) => {
+                draft.aiSettings.visionServiceId = event.target.value;
+              })}
+            >
+              {config.services.ai.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name || service.provider} · {service.model || "未填写模型"}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+
+        {config.services.ai.length ? (
+          <div className="divide-y divide-border-subtle">
+            {config.services.ai.map((service, index) => (
+              <AiProviderPanel
+                key={service.id}
+                service={service}
+                index={index}
+                expanded={expandedId === service.id}
+                isTextDefault={config.aiSettings.defaultServiceId === service.id}
+                isVisionDefault={(config.aiSettings.visionServiceId || config.aiSettings.defaultServiceId) === service.id}
+                onToggle={() => setExpandedId((current) => (current === service.id ? "" : service.id))}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="p-5 md:p-6">
+            <EmptyState title="还没有 AI Provider" description="添加一个模型后即可配置 AI 翻译。" />
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="AI 回复偏好" icon={<Bot size={18} />}>
+        <SettingRow title="回复目标语言"><Select value={config.aiSettings.replyTargetLanguage} onChange={(event) => void updateConfig((draft) => { draft.aiSettings.replyTargetLanguage = event.target.value; })}>{TARGET_LANGUAGES.map((language) => <option key={language.code} value={language.code}>{language.label}</option>)}</Select></SettingRow>
+        <SettingRow title="回复风格"><Select value={config.aiSettings.replyStyle} onChange={(event) => void updateConfig((draft) => { draft.aiSettings.replyStyle = event.target.value as ReplyStyle; })}><option value="natural">自然</option><option value="friendly">友好</option><option value="casual">随意</option><option value="polite">礼貌</option><option value="playful">俏皮</option></Select></SettingRow>
+        <SettingRow title="简短模式"><Switch checked={config.aiSettings.shortMode} onChange={(checked) => void updateConfig((draft) => void (draft.aiSettings.shortMode = checked))} /></SettingRow>
+        <SettingRow title="启用 AI 代回"><Switch checked={config.aiSettings.enableAiReply} onChange={(checked) => void updateConfig((draft) => void (draft.aiSettings.enableAiReply = checked))} /></SettingRow>
+        <SettingRow title="自动复制 AI 回复"><Switch checked={config.aiSettings.autoCopyAiReply} onChange={(checked) => void updateConfig((draft) => void (draft.aiSettings.autoCopyAiReply = checked))} /></SettingRow>
+      </SectionCard>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <PromptEditor title="AI 翻译提示词" value={config.aiSettings.translationPrompt} onChange={(value) => void updateConfig((draft) => { draft.aiSettings.translationPrompt = value; })} />
+        <PromptEditor title="AI 代回提示词" value={config.aiSettings.replyPrompt} onChange={(value) => void updateConfig((draft) => { draft.aiSettings.replyPrompt = value; })} />
+      </div>
+    </div>
+  );
+}
+
+function AiProviderPanel({
+  service,
+  index,
+  expanded,
+  isTextDefault,
+  isVisionDefault,
+  onToggle
+}: {
+  service: AiService;
+  index: number;
+  expanded: boolean;
+  isTextDefault: boolean;
+  isVisionDefault: boolean;
+  onToggle: () => void;
+}) {
+  const { config, updateConfig } = useConfigStore();
+  const [testing, setTesting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [messageOk, setMessageOk] = useState<boolean | null>(null);
+
   const runTest = async () => {
-    if (!service) return;
     setTesting(true);
     setMessage("");
     setMessageOk(null);
@@ -286,92 +389,94 @@ function AiServicesTab() {
     }
   };
 
+  const deleteProvider = () => void updateConfig((draft) => {
+    draft.services.ai = draft.services.ai.filter((item) => item.id !== service.id);
+    if (draft.aiSettings.defaultServiceId === service.id) {
+      draft.aiSettings.defaultServiceId = draft.services.ai[0]?.id ?? "";
+    }
+    if (draft.aiSettings.visionServiceId === service.id) {
+      draft.aiSettings.visionServiceId = draft.aiSettings.defaultServiceId;
+    }
+  });
+
+  const providerKind = service.providerType.replace("Provider", "") || "Provider";
+  const hasApiKey = Boolean(service.apiKey.trim());
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-lg font-medium text-text-primary">Providers</h3>
-            <div className="flex gap-2">
-              <Select className="h-9 flex-1 sm:w-40" value={selectedProvider} onChange={(event) => setSelectedProvider(event.target.value)}>
-                {AI_PROVIDER_PRESETS.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
-                <option value="CustomProvider">Custom</option>
-              </Select>
-              <Button size="icon" icon={<Plus size={18} />} title="添加 Provider" onClick={addProvider} />
-            </div>
+    <article className={cn("bg-surface transition", expanded && "bg-surface-hover/45")}>
+      <div className="grid gap-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:px-6">
+        <button type="button" className="min-w-0 text-left" onClick={onToggle}>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+              {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
+            </span>
+            <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", isTextDefault || isVisionDefault ? "bg-accent" : "bg-border")} />
+            <span className="min-w-0">
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-semibold text-text-primary">{service.name || service.provider || "未命名模型"}</span>
+                {isTextDefault ? <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent">文本默认</span> : null}
+                {isVisionDefault ? <span className="rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success">识图默认</span> : null}
+                <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium text-text-secondary">{providerKind}</span>
+              </span>
+              <span className="mt-1 block truncate text-xs text-text-secondary">{service.model || "未填写模型名"} · {service.baseUrl || "未填写 Base URL"}</span>
+            </span>
           </div>
-          <div className="space-y-3">
-            {config.services.ai.map((item) => (
-              <ProviderCard
-                key={item.id}
-                name={item.name || item.provider}
-                description={item.id === config.aiSettings.defaultServiceId ? "Default translation engine" : item.baseUrl || item.providerType}
-                badge={item.model || item.providerType.replace("Provider", "")}
-                enabled={item.enabled}
-                active={item.id === service?.id}
-                onClick={() => setSelectedId(item.id)}
-              />
-            ))}
+        </button>
+
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", hasApiKey ? "bg-success-soft text-success" : "bg-danger-soft text-danger")}>
+            {hasApiKey ? "Key 已配置" : "缺少 Key"}
+          </span>
+          <Button size="icon" variant="ghost" icon={<TestTube2 size={16} />} title="测试连接" disabled={testing} onClick={() => void runTest()} />
+          <Button size="icon" variant="ghost" icon={<Trash2 size={16} />} title="删除" onClick={deleteProvider} />
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="border-t border-border-subtle px-5 pb-5 pt-4 md:px-6">
+          <div className="grid gap-4 xl:grid-cols-2">
+            <LabeledSelect label="Provider Type" value={service.providerType} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].providerType = value as AiProviderType; })}>
+              <option value="OpenAICompatibleProvider">OpenAI Compatible</option>
+              <option value="GeminiProvider">Gemini</option>
+              <option value="AnthropicProvider">Anthropic</option>
+              <option value="CustomProvider">Custom</option>
+            </LabeledSelect>
+            <LabeledInput label="显示名称" value={service.name} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].name = value; })} />
+            <LabeledInput label="Base URL" className="xl:col-span-2" value={service.baseUrl} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].baseUrl = value; })} />
+            <label className="space-y-2 xl:col-span-2">
+              <span className="text-xs font-medium text-text-secondary">API Key</span>
+              <PasswordInput value={service.apiKey} placeholder="sk-..." onChange={(event) => void updateConfig((draft) => { draft.services.ai[index].apiKey = event.target.value; })} />
+            </label>
+            <LabeledInput label="Model" value={service.model} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].model = value; })} />
+            <LabeledInput label="Provider ID" value={service.provider} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].provider = value; })} />
+            <RangeField label="Temperature" min={0} max={2} step={0.1} value={service.temperature} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].temperature = value; })} />
+            <RangeField label="Max Tokens" min={1} max={8192} step={1} value={service.maxTokens} onChange={(value) => void updateConfig((draft) => { draft.services.ai[index].maxTokens = value; })} />
+            <label className="space-y-2 xl:col-span-2">
+              <span className="text-xs font-medium text-text-secondary">customHeaders</span>
+              <Textarea className="min-h-24 font-mono text-xs" value={service.customHeaders} onChange={(event) => void updateConfig((draft) => { draft.services.ai[index].customHeaders = event.target.value; })} />
+            </label>
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-3">
+            <SettingRow title="使用代理" className="rounded-xl border border-border-subtle bg-surface"><Switch checked={service.useProxy} onChange={(checked) => void updateConfig((draft) => { draft.services.ai[index].useProxy = checked; })} /></SettingRow>
+            <SettingRow title="文本默认" className="rounded-xl border border-border-subtle bg-surface"><Switch checked={isTextDefault} onChange={(checked) => void updateConfig((draft) => { if (checked) draft.aiSettings.defaultServiceId = service.id; })} /></SettingRow>
+            <SettingRow title="识图默认" className="rounded-xl border border-border-subtle bg-surface"><Switch checked={isVisionDefault} onChange={(checked) => void updateConfig((draft) => { if (checked) draft.aiSettings.visionServiceId = service.id; })} /></SettingRow>
+          </div>
+
+          {message ? (
+            <div className={cn("mt-4 rounded-xl border px-4 py-3 text-sm", messageOk ? "border-success-soft bg-success-soft text-success" : "border-danger-soft bg-danger-soft text-danger")}>
+              {message}
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" icon={<TestTube2 size={16} />} disabled={testing} onClick={() => void runTest()}>{testing ? "测试中" : "测试连接"}</Button>
+            <Button variant="danger" icon={<Trash2 size={16} />} onClick={deleteProvider}>删除模型</Button>
+            <Button onClick={() => setMessage("已保存更改")}>保存更改</Button>
           </div>
         </div>
-
-        <SectionCard title="Provider Configuration" className="min-w-0">
-          {service ? (
-            <>
-              <div className="grid grid-cols-1 gap-4 px-5 py-5 xl:grid-cols-2 xl:px-6">
-                <LabeledSelect label="Provider Type" value={service.providerType} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].providerType = value as AiProviderType; })}>
-                  <option value="OpenAICompatibleProvider">OpenAI Compatible</option>
-                  <option value="GeminiProvider">Gemini</option>
-                  <option value="AnthropicProvider">Anthropic</option>
-                  <option value="CustomProvider">Custom</option>
-                </LabeledSelect>
-                <LabeledInput label="显示名称" value={service.name} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].name = value; })} />
-                <LabeledInput label="Base URL" className="xl:col-span-2" value={service.baseUrl} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].baseUrl = value; })} />
-                <label className="space-y-2 xl:col-span-2">
-                  <span className="text-xs font-medium text-text-secondary">API Key</span>
-                  <PasswordInput value={service.apiKey} placeholder="sk-..." onChange={(event) => void updateConfig((draft) => { draft.services.ai[selectedIndex].apiKey = event.target.value; })} />
-                </label>
-                <LabeledInput label="Model" value={service.model} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].model = value; })} />
-                <LabeledInput label="Provider ID" value={service.provider} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].provider = value; })} />
-                <RangeField label="Temperature" min={0} max={2} step={0.1} value={service.temperature} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].temperature = value; })} />
-                <RangeField label="Max Tokens" min={1} max={8192} step={1} value={service.maxTokens} onChange={(value) => void updateConfig((draft) => { draft.services.ai[selectedIndex].maxTokens = value; })} />
-                <label className="space-y-2 xl:col-span-2">
-                  <span className="text-xs font-medium text-text-secondary">customHeaders</span>
-                  <Textarea className="min-h-24 font-mono text-xs" value={service.customHeaders} onChange={(event) => void updateConfig((draft) => { draft.services.ai[selectedIndex].customHeaders = event.target.value; })} />
-                </label>
-              </div>
-              <div className="border-t border-border-subtle px-6 py-4">
-                <div className="mb-4 grid grid-cols-1 gap-3 xl:grid-cols-3">
-                  <SettingRow title="启用 Provider" className="rounded-xl border border-border-subtle"><Switch checked={service.enabled} onChange={(checked) => void updateConfig((draft) => { draft.services.ai[selectedIndex].enabled = checked; })} /></SettingRow>
-                  <SettingRow title="使用代理" className="rounded-xl border border-border-subtle"><Switch checked={service.useProxy} onChange={(checked) => void updateConfig((draft) => { draft.services.ai[selectedIndex].useProxy = checked; })} /></SettingRow>
-                  <SettingRow title="默认服务" className="rounded-xl border border-border-subtle"><Switch checked={config.aiSettings.defaultServiceId === service.id} onChange={(checked) => void updateConfig((draft) => { if (checked) draft.aiSettings.defaultServiceId = service.id; })} /></SettingRow>
-                </div>
-                {message ? <div className={cn("mb-4 rounded-xl border px-4 py-3 text-sm", messageOk ? "border-success-soft bg-success-soft text-success" : "border-danger-soft bg-danger-soft text-danger")}>{message}</div> : null}
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button variant="secondary" onClick={() => void loadConfig().then(() => setMessage("已重新加载配置"))}>Discard</Button>
-                  <Button variant="secondary" icon={<TestTube2 size={16} />} disabled={testing} onClick={() => void runTest()}>{testing ? "测试中" : "测试连接"}</Button>
-                  <Button variant="danger" icon={<Trash2 size={16} />} onClick={() => void updateConfig((draft) => { draft.services.ai = draft.services.ai.filter((item) => item.id !== service.id); })}>删除</Button>
-                  <Button onClick={() => setMessage("已保存更改")}>Save Changes</Button>
-                </div>
-              </div>
-            </>
-          ) : <EmptyState title="还没有 AI Provider" description="添加一个 Provider 后即可配置 AI 翻译。" />}
-        </SectionCard>
-      </div>
-
-      <SectionCard title="AI 回复偏好" icon={<Bot size={18} />}>
-        <SettingRow title="回复目标语言"><Select value={config.aiSettings.replyTargetLanguage} onChange={(event) => void updateConfig((draft) => { draft.aiSettings.replyTargetLanguage = event.target.value; })}>{TARGET_LANGUAGES.map((language) => <option key={language.code} value={language.code}>{language.label}</option>)}</Select></SettingRow>
-        <SettingRow title="回复风格"><Select value={config.aiSettings.replyStyle} onChange={(event) => void updateConfig((draft) => { draft.aiSettings.replyStyle = event.target.value as ReplyStyle; })}><option value="natural">自然</option><option value="friendly">友好</option><option value="casual">随意</option><option value="polite">礼貌</option><option value="playful">俏皮</option></Select></SettingRow>
-        <SettingRow title="简短模式"><Switch checked={config.aiSettings.shortMode} onChange={(checked) => void updateConfig((draft) => void (draft.aiSettings.shortMode = checked))} /></SettingRow>
-        <SettingRow title="启用 AI 代回"><Switch checked={config.aiSettings.enableAiReply} onChange={(checked) => void updateConfig((draft) => void (draft.aiSettings.enableAiReply = checked))} /></SettingRow>
-        <SettingRow title="自动复制 AI 回复"><Switch checked={config.aiSettings.autoCopyAiReply} onChange={(checked) => void updateConfig((draft) => void (draft.aiSettings.autoCopyAiReply = checked))} /></SettingRow>
-      </SectionCard>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <PromptEditor title="AI 翻译提示词" value={config.aiSettings.translationPrompt} onChange={(value) => void updateConfig((draft) => { draft.aiSettings.translationPrompt = value; })} />
-        <PromptEditor title="AI 代回提示词" value={config.aiSettings.replyPrompt} onChange={(value) => void updateConfig((draft) => { draft.aiSettings.replyPrompt = value; })} />
-      </div>
-    </div>
+      ) : null}
+    </article>
   );
 }
 

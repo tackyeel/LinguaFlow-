@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Copy, Eraser, Languages, Lightbulb, MessageSquareReply, Repeat2, Sparkles } from "lucide-react";
+import { Camera, ChevronDown, Copy, Eraser, Image as ImageIcon, Languages, Lightbulb, MessageSquareReply, Repeat2, Sparkles } from "lucide-react";
 import { MAINSTREAM_LANGUAGES, TARGET_LANGUAGES } from "../../constants/languages";
 import type { useTranslatorEngine } from "../../hooks/useTranslatorEngine";
+import { getActiveAiModelName } from "../../utils/aiModel";
 import { DynamicIslandResult } from "./DynamicIslandResult";
 
-type TabId = "translation" | "explanation" | "reply";
+type TabId = "translation" | "explanation" | "reply" | "vision";
 
 interface DynamicIslandPanelProps {
   engine: ReturnType<typeof useTranslatorEngine>;
@@ -13,10 +14,13 @@ interface DynamicIslandPanelProps {
   translationText: string;
   aiExplanationText: string;
   aiReplyText: string;
+  imageTranslationText: string;
+  imageTranslationPreview: string;
+  imageTranslationSize: string;
   error: string;
-  running: boolean;
   onCopy: () => void;
   onClear: () => void;
+  onImageTranslate: () => void;
   onExplain: () => void;
   onReply: () => void;
 }
@@ -24,7 +28,8 @@ interface DynamicIslandPanelProps {
 const tabs: Array<{ id: TabId; label: string; icon: JSX.Element }> = [
   { id: "translation", label: "翻译", icon: <Sparkles size={15} /> },
   { id: "explanation", label: "AI 解释", icon: <Lightbulb size={15} /> },
-  { id: "reply", label: "AI 回复", icon: <MessageSquareReply size={15} /> }
+  { id: "reply", label: "AI 回复", icon: <MessageSquareReply size={15} /> },
+  { id: "vision", label: "AI 识图", icon: <ImageIcon size={15} /> }
 ];
 
 export function DynamicIslandPanel({
@@ -34,13 +39,19 @@ export function DynamicIslandPanel({
   translationText,
   aiExplanationText,
   aiReplyText,
+  imageTranslationText,
+  imageTranslationPreview,
+  imageTranslationSize,
   error,
-  running,
   onCopy,
   onClear,
+  onImageTranslate,
   onExplain,
   onReply
 }: DynamicIslandPanelProps) {
+  const aiModelName = getActiveAiModelName(engine.config, activeTab === "vision" ? "vision" : "text");
+  const showAiModel = activeTab === "explanation" || activeTab === "reply" || activeTab === "vision";
+
   return (
     <motion.div
       className="dynamic-island-panel no-drag"
@@ -65,9 +76,17 @@ export function DynamicIslandPanel({
             </button>
           ))}
         </div>
+        {showAiModel ? (
+          <span
+            className="ml-3 min-w-0 max-w-[210px] truncate rounded-full border border-accent/25 bg-accent-soft px-3 py-1 text-xs font-medium text-accent"
+            title={aiModelName}
+          >
+            {aiModelName}
+          </span>
+        ) : null}
       </div>
 
-      <div className="dynamic-island-result-pane h-[156px] min-h-0 overflow-hidden px-4 py-3">
+      <div className="dynamic-island-result-pane h-[224px] min-h-0 overflow-hidden px-4 py-3">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -83,8 +102,14 @@ export function DynamicIslandPanel({
               translationText={translationText}
               aiExplanationText={aiExplanationText}
               aiReplyText={aiReplyText}
+              imageTranslationText={imageTranslationText}
+              imageTranslationPreview={imageTranslationPreview}
+              imageTranslationSize={imageTranslationSize}
               error={error}
-              running={running}
+              translationRunning={engine.translationRunning}
+              aiExplanationRunning={engine.aiExplanationRunning}
+              aiReplyRunning={engine.aiReplyRunning}
+              imageTranslationRunning={engine.imageTranslationRunning}
             />
           </motion.div>
         </AnimatePresence>
@@ -97,6 +122,9 @@ export function DynamicIslandPanel({
           </button>
           <button type="button" title="清空" className="dynamic-island-icon-button" onClick={onClear}>
             <Eraser size={16} />
+          </button>
+          <button type="button" title="截图识图翻译" className="dynamic-island-icon-button" onClick={onImageTranslate}>
+            <Camera size={16} />
           </button>
         </div>
 

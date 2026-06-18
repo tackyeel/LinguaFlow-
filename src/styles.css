@@ -228,7 +228,7 @@ body[data-window="dynamic-island"] {
 
 .dynamic-island-window-expanded .dynamic-island-content {
   width: 684px;
-  height: 324px;
+  height: 392px;
 }
 
 .dynamic-island-capsule {
@@ -258,7 +258,7 @@ body[data-window="dynamic-island"] {
   left: 50%;
   top: 64px;
   width: 684px;
-  height: 260px;
+  height: 328px;
   margin-left: -342px;
   overflow: hidden;
   border: 1px solid rgb(var(--color-border) / 0.78);
@@ -278,10 +278,14 @@ body[data-window="dynamic-island"] {
   border: 1px solid rgb(var(--color-border) / 0.85);
   border-radius: 999px;
   background: rgb(var(--color-surface-hover) / 0.88);
-  padding: 0 14px;
+  padding: 8px 14px;
   color: rgb(var(--color-text-primary));
   font-size: 14px;
+  line-height: 20px;
   outline: none;
+  resize: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: inset 0 1px 0 rgb(var(--color-surface) / 0.65);
   transition: border 150ms ease, background 150ms ease, box-shadow 150ms ease;
 }

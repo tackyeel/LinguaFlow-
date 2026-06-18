@@ -76,6 +76,7 @@ export const defaultConfig: AppConfig = {
   },
   aiSettings: {
     defaultServiceId: "openai",
+    visionServiceId: "openai",
     replyTargetLanguage: "en",
     replyStyle: "natural",
     shortMode: true,

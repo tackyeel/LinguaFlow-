@@ -103,6 +103,13 @@ export const useConfigStore = create<ConfigStore>((set, get) => ({
 function normalizeConfig(config: AppConfig): AppConfig {
   config.runtimePort ??= null;
   config.translatorWindowMode = config.translatorWindowMode === "dynamicIsland" ? "dynamicIsland" : "normal";
+  const aiServiceIds = new Set(config.services.ai.map((service) => service.id));
+  if (!config.aiSettings.defaultServiceId || !aiServiceIds.has(config.aiSettings.defaultServiceId)) {
+    config.aiSettings.defaultServiceId = config.services.ai[0]?.id ?? "";
+  }
+  if (!config.aiSettings.visionServiceId || !aiServiceIds.has(config.aiSettings.visionServiceId)) {
+    config.aiSettings.visionServiceId = config.aiSettings.defaultServiceId;
+  }
   config.services.translate = config.services.translate.map((service) => ({
     ...service,
     provider: service.provider ?? service.id,

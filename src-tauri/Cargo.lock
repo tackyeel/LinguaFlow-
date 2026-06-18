@@ -1841,6 +1841,8 @@ name = "linguaflow"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
+ "image",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

@@ -23,3 +23,5 @@ tauri-plugin-global-shortcut = "2"
 tiny_http = "0.12"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "socks"] }
 arboard = "3"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png"] }

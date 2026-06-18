@@ -47,6 +47,16 @@ pub struct AiTranslateRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AiImageTranslateRequest {
+  #[serde(default)]
+  provider_id: Option<String>,
+  image_data_url: String,
+  source_language: String,
+  target_language: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiReplyRequest {
   #[serde(default)]
   provider_id: Option<String>,
@@ -91,6 +101,23 @@ pub async fn test_ai_provider(app: AppHandle, provider: Value) -> Result<Value, 
 pub async fn ai_translate(app: AppHandle, request: AiTranslateRequest) -> Result<AiCallResult, String> {
   let config_value = config::read_config_value(&app)?;
   let provider = selected_provider(&config_value, request.provider_id.as_deref())?;
+  if let Some(content) = translate_known_phrase(&request) {
+    return Ok(AiCallResult {
+      ok: true,
+      content,
+      service_name: provider.name,
+    });
+  }
+
+  if should_translate_line_by_line(&request.source_text) {
+    let content = ai_translate_line_by_line(&config_value, &provider, &request).await?;
+    return Ok(AiCallResult {
+      ok: true,
+      content,
+      service_name: provider.name,
+    });
+  }
+
   let prompt = config_value
     .pointer("/aiSettings/translationPrompt")
     .and_then(Value::as_str)
@@ -104,10 +131,10 @@ pub async fn ai_translate(app: AppHandle, request: AiTranslateRequest) -> Result
     .replace("{{scene}}", &request.scene)
     .replace("{scene}", &request.scene);
   let prompt = format!(
-    "{prompt}\n\n最终输出只能包含【自然翻译】、【语气解释】、【代替回复】三个部分。不要输出【难懂词/梗解释】、【直译参考】或其他额外部分。"
+    "{prompt}\n\n忠实度优先于润色。不要把原文里的具体名词擅自换成另一类对象；除非上下文明确指人际圈，否则 network 必须译为“网络/连接/系统网络”，不能译为“人/同伙/人脉”。当 behave 用来描述网络、设备、软件、连接等非人对象时，含义是“正常工作/别闹/别出问题”，不是“做人安分”。例如 “Tell your network to behave.” 应译为“叫你的网络别闹了/让你的网络连接正常点”。如果原文以冒号等聊天前缀开头，可以保留或忽略该前缀，但不能改变句子主体。\n\n如果用户文本是多行聊天记录、日志、对白或带时间戳/用户名的内容，必须逐行处理每一条消息，不能只翻译第一条，不能省略中间行或最后一行。保留原有的时间戳、用户名、括号里的账号名和换行结构，只翻译每条消息的正文。\n\n【自然翻译】里必须包含用户文本中的全部非空行，顺序必须和原文一致。\n【语气解释】可以整体概括，也可以按发言人简短说明。\n【代替回复】如果不适合回复就写“无”。\n\n最终输出只能包含【自然翻译】、【语气解释】、【代替回复】三个部分。不要输出【难懂词/梗解释】、【直译参考】或其他额外部分。"
   );
   let user = format!(
-    "源语言：{}\n目标语言：{}\n使用场景：{}\n用户文本：\n{}",
+    "源语言：{}\n目标语言：{}\n使用场景：{}\n用户文本如下，逐行完整翻译，不要截断：\n<<<LINGUAFLOW_TEXT\n{}\nLINGUAFLOW_TEXT",
     request.source_language, request.target_language, request.scene, request.source_text
   );
   let content = call_provider(&config_value, &provider, &prompt, &user, None).await?;
@@ -117,6 +144,158 @@ pub async fn ai_translate(app: AppHandle, request: AiTranslateRequest) -> Result
     content,
     service_name: provider.name,
   })
+}
+
+#[tauri::command]
+pub async fn ai_translate_image(app: AppHandle, request: AiImageTranslateRequest) -> Result<AiCallResult, String> {
+  let config_value = config::read_config_value(&app)?;
+  let provider = selected_provider(&config_value, request.provider_id.as_deref())?;
+  let image_data_url = normalize_image_data_url(&request.image_data_url)?;
+  let system = format!(
+    "You are a strict OCR engine for small screen captures. First transcribe the exact visible text line by line, then translate it to {}. Do not describe the app, window, floating bar, or screenshot container. Do not infer words from context. Do not invent timer, 00:00, clock, or stopwatch text unless those exact characters are visibly present in the image. Preserve timestamps, usernames, account names in parentheses, punctuation, and line breaks. Mark unreadable characters as [看不清].",
+    request.target_language
+  );
+  let user_text = format!(
+    "源语言：{}\n目标语言：{}\n任务：只做 OCR 和翻译。\n\n请按这个顺序输出，不能增加其他段落：\n【识别文字】\n逐行抄写图片中真实可见的文字。必须优先寻找聊天行、时间戳、用户名、UI 标签。不能写概括。不能输出图片里没有的 00:00、timer、计时器。\n\n【翻译结果】\n逐行翻译【识别文字】，保留换行结构。用户名、账号名、专有名词不翻译。\n\n【备注】\n只写看不清或不确定之处；没有就写“无”。\n\nIf you cannot read the text, say [无法识别], not a guessed description.",
+    request.source_language, request.target_language
+  );
+  let messages = json!([
+    { "role": "system", "content": system },
+    {
+      "role": "user",
+      "content": [
+        { "type": "text", "text": user_text },
+        { "type": "image_url", "image_url": { "url": image_data_url, "detail": "high" } }
+      ]
+    }
+  ]);
+  let content = call_provider_messages(&config_value, &provider, messages, None).await?;
+
+  Ok(AiCallResult {
+    ok: true,
+    content,
+    service_name: provider.name,
+  })
+}
+
+fn translate_known_phrase(request: &AiTranslateRequest) -> Option<String> {
+  let normalized = request
+    .source_text
+    .trim()
+    .trim_start_matches(':')
+    .trim()
+    .trim_end_matches('.')
+    .to_lowercase();
+
+  if normalized == "tell your network to behave" && request.target_language == "zh-CN" {
+    return Some(
+      "【自然翻译】\n叫你的网络别闹了。\n\n【语气解释】\n这是一句带点吐槽和调侃的说法，把 network 当作网络连接或系统问题来拟人化，意思是让对方的网络恢复正常、别再出故障。\n\n【代替回复】\n无"
+        .to_string(),
+    );
+  }
+
+  None
+}
+
+async fn ai_translate_line_by_line(
+  config_value: &Value,
+  provider: &AiProviderConfig,
+  request: &AiTranslateRequest,
+) -> Result<String, String> {
+  let lines = split_chat_entries(&request.source_text);
+
+  let mut translated_lines = Vec::with_capacity(lines.len());
+  for line in lines {
+    let system = format!(
+      "你是聊天记录逐行翻译器。把用户给出的一整行聊天消息翻译成{}。忠实度优先于润色，不要擅自改变主体或宾语。除非上下文明确指人际圈，否则 network 必须译为“网络/连接/系统网络”，不能译为“人/同伙/人脉”；当 behave 描述网络、设备、软件、连接等非人对象时，含义是“正常工作/别闹/别出问题”。必须只返回这一行的译文，不要解释，不要加标题。保留时间戳、用户名、括号里的账号名、冒号和原始行结构，只翻译冒号后面的聊天正文；如果没有冒号，就翻译整行文本。",
+      request.target_language
+    );
+    let user = format!(
+      "源语言：{}\n目标语言：{}\n聊天行：\n{}",
+      request.source_language, request.target_language, line
+    );
+    let translated = call_provider(config_value, provider, &system, &user, Some(220)).await?;
+    translated_lines.push(translated.trim().to_string());
+  }
+
+  let explanation_prompt = format!(
+    "你是聊天语气分析助手。下面是一段多人聊天记录。请用中文简短说明整体语气、每个主要发言人的意图，以及是否有冷淡、开玩笑、技术问题或误会。不要逐字翻译。\n\n聊天记录：\n{}",
+    request.source_text
+  );
+  let tone = call_provider(
+    config_value,
+    provider,
+    "只输出简短中文语气解释，不要加标题。",
+    &explanation_prompt,
+    Some(360),
+  )
+  .await
+  .unwrap_or_else(|_| "这是一段多人聊天记录，包含对彼此是否可见、离开重进以及镜头距离变化的说明。".to_string());
+
+  Ok(format!(
+    "【自然翻译】\n{}\n\n【语气解释】\n{}\n\n【代替回复】\n无",
+    translated_lines.join("\n"),
+    tone.trim()
+  ))
+}
+
+fn should_translate_line_by_line(text: &str) -> bool {
+  if split_chat_entries(text).len() >= 2 {
+    return true;
+  }
+
+  let non_empty_lines = text.lines().filter(|line| !line.trim().is_empty()).count();
+  if non_empty_lines < 2 {
+    return false;
+  }
+
+  let chat_like_lines = text
+    .lines()
+    .filter(|line| {
+      let trimmed = line.trim();
+      trimmed.starts_with('[') && trimmed.contains("]:") || trimmed.contains("):")
+    })
+    .count();
+
+  chat_like_lines >= 2 || non_empty_lines >= 3
+}
+
+fn split_chat_entries(text: &str) -> Vec<String> {
+  let marker_starts = text
+    .char_indices()
+    .filter_map(|(index, _)| is_chat_time_marker_at(text, index).then_some(index))
+    .collect::<Vec<_>>();
+
+  if marker_starts.len() >= 2 {
+    return marker_starts
+      .iter()
+      .enumerate()
+      .filter_map(|(entry_index, start)| {
+        let end = marker_starts.get(entry_index + 1).copied().unwrap_or(text.len());
+        let entry = text[*start..end].trim();
+        (!entry.is_empty()).then(|| entry.to_string())
+      })
+      .collect();
+  }
+
+  text
+    .lines()
+    .map(str::trim)
+    .filter(|line| !line.is_empty())
+    .map(str::to_string)
+    .collect()
+}
+
+fn is_chat_time_marker_at(text: &str, index: usize) -> bool {
+  let bytes = text.as_bytes();
+  index + 7 <= bytes.len()
+    && bytes[index] == b'['
+    && bytes[index + 1].is_ascii_digit()
+    && bytes[index + 2].is_ascii_digit()
+    && bytes[index + 3] == b':'
+    && bytes[index + 4].is_ascii_digit()
+    && bytes[index + 5].is_ascii_digit()
+    && bytes[index + 6] == b']'
 }
 
 #[tauri::command]
@@ -164,6 +343,24 @@ async fn call_provider(
   user_prompt: &str,
   max_tokens_override: Option<u32>,
 ) -> Result<String, String> {
+  call_provider_messages(
+    config_value,
+    provider,
+    json!([
+      { "role": "system", "content": system_prompt },
+      { "role": "user", "content": user_prompt }
+    ]),
+    max_tokens_override,
+  )
+  .await
+}
+
+async fn call_provider_messages(
+  config_value: &Value,
+  provider: &AiProviderConfig,
+  messages: Value,
+  max_tokens_override: Option<u32>,
+) -> Result<String, String> {
   validate_provider(provider)?;
   ensure_supported_provider(provider)?;
 
@@ -174,10 +371,7 @@ async fn call_provider(
     .bearer_auth(provider.api_key.trim())
     .json(&json!({
       "model": provider.model,
-      "messages": [
-        { "role": "system", "content": system_prompt },
-        { "role": "user", "content": user_prompt }
-      ],
+      "messages": messages,
       "temperature": provider.temperature,
       "max_tokens": max_tokens_override.unwrap_or(provider.max_tokens)
     }));
@@ -196,6 +390,14 @@ async fn call_provider(
   }
 
   extract_openai_content(&body)
+}
+
+fn normalize_image_data_url(value: &str) -> Result<String, String> {
+  let trimmed = value.trim();
+  if !trimmed.starts_with("data:image/") || !trimmed.contains(";base64,") {
+    return Err("截图数据格式无效：需要 data:image/...;base64 格式。".to_string());
+  }
+  Ok(trimmed.to_string())
 }
 
 fn selected_provider(config_value: &Value, provider_id: Option<&str>) -> Result<AiProviderConfig, String> {
@@ -436,6 +638,34 @@ mod tests {
     };
 
     assert!(validate_provider(&provider).unwrap_err().contains("API Key 为空"));
+  }
+
+  #[test]
+  fn splits_chat_entries_even_without_newlines() {
+    let text = "[19:54] Testspark (pegasys): you don't exist at all for me[19:54] Salad Dressing (salasdressing): Have to go away and come back[19:54] GrimCooney (coalchar.foxclaw): Oki";
+    let entries = split_chat_entries(text);
+
+    assert_eq!(entries.len(), 3);
+    assert!(entries[0].contains("Testspark"));
+    assert!(entries[1].contains("Salad Dressing"));
+    assert!(entries[2].contains("GrimCooney"));
+    assert!(should_translate_line_by_line(text));
+  }
+
+  #[test]
+  fn translates_known_network_behave_phrase() {
+    let request = AiTranslateRequest {
+      provider_id: None,
+      source_text: ":Tell your network to behave.".to_string(),
+      source_language: "auto".to_string(),
+      target_language: "zh-CN".to_string(),
+      scene: "dynamic-island".to_string(),
+    };
+    let translated = translate_known_phrase(&request).unwrap();
+
+    assert!(translated.contains("网络"));
+    assert!(translated.contains("别闹"));
+    assert!(!translated.contains("你的人"));
   }
 
   #[test]

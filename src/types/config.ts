@@ -4,7 +4,7 @@ export type ProxyProtocol = "http" | "https" | "socks5";
 export type LanguageDetectEngine = "local" | "service" | "ai";
 export type AiReplyCopyFormat = "replyOnly" | "replyWithExplanation";
 export type ReplyStyle = "natural" | "friendly" | "casual" | "polite" | "playful";
-export type HistoryType = "translation" | "ocr" | "aiReply" | "ai_translate" | "ai_reply";
+export type HistoryType = "translation" | "ocr" | "aiReply" | "ai_translate" | "ai_reply" | "ai_image_translate";
 export type AiProviderType =
   | "OpenAICompatibleProvider"
   | "GeminiProvider"
@@ -92,6 +92,7 @@ export interface ServicesConfig {
 
 export interface AiSettings {
   defaultServiceId: string;
+  visionServiceId?: string;
   replyTargetLanguage: string;
   replyStyle: ReplyStyle;
   shortMode: boolean;
