@@ -70,6 +70,7 @@ pub fn show_window_by_label(app: &AppHandle, label: &str) -> Result<(), String> 
 
   if label == "dynamic-island" {
     position_dynamic_island(app, false)?;
+    let _ = window.emit("dynamic-island:collapse", ());
     window.set_background_color(Some(TRANSPARENT)).map_err(|error| error.to_string())?;
     window.set_shadow(false).map_err(|error| error.to_string())?;
     window.set_always_on_top(true).map_err(|error| error.to_string())?;
@@ -98,6 +99,39 @@ pub fn show_translator_window(app: &AppHandle) -> Result<(), String> {
       let _ = window.hide();
     }
     show_window_by_label(app, "translate")
+  }
+}
+
+#[tauri::command]
+pub fn toggle_translator_window(app: AppHandle) -> Result<(), String> {
+  let config_value = config::read_config_value(&app)?;
+  let mode = config_value
+    .get("translatorWindowMode")
+    .and_then(serde_json::Value::as_str)
+    .unwrap_or("normal");
+  let (target_label, other_label) = if mode == "dynamicIsland" {
+    ("dynamic-island", "translate")
+  } else {
+    ("translate", "dynamic-island")
+  };
+
+  if let Some(window) = app.get_webview_window(other_label) {
+    let _ = window.hide();
+  }
+
+  let window = app
+    .get_webview_window(target_label)
+    .ok_or_else(|| format!("window '{target_label}' was not found"))?;
+  let visible = window.is_visible().map_err(|error| error.to_string())?;
+
+  if visible {
+    if target_label == "dynamic-island" {
+      let _ = window.emit("dynamic-island:collapse", ());
+      let _ = position_dynamic_island(&app, false);
+    }
+    window.hide().map_err(|error| error.to_string())
+  } else {
+    show_window_by_label(&app, target_label)
   }
 }
 

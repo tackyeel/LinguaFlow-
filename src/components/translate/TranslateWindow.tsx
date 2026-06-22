@@ -10,6 +10,7 @@ import { runAiReply, runAiTranslate } from "../../utils/ai";
 import { appendHistoryEntry } from "../../utils/history";
 import { hideWindow, invokeCommand, isTauriRuntime, listenToTauriEvent, setAlwaysOnTop, switchTranslatorWindowMode } from "../../utils/tauri";
 import { translateWithService, type ServiceTranslateResult } from "../../utils/translateServices";
+import { resolveTranslationDirection, type ResolvedTranslationDirection } from "../../utils/languageDirection";
 import type { TranslateService } from "../../types/config";
 
 interface ResultPanel {
@@ -148,6 +149,7 @@ export function TranslateWindow() {
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setRunning(true);
+    const direction = resolveTranslationDirection(text, settings);
 
     const loadingPanels = enabledServices.map((service) => serviceToPanel(service, true));
     if (aiEnabled) {
@@ -170,8 +172,8 @@ export function TranslateWindow() {
       const result = await translateWithService({
         service,
         sourceText: text,
-        sourceLanguage: settings.sourceLanguage,
-        targetLanguage: settings.targetLanguage
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage
       });
       updatePanel(requestId, resultToPanel(result, service));
       if (result.ok && result.content.trim()) {
@@ -179,28 +181,28 @@ export function TranslateWindow() {
           type: "translation",
           sourceText: text,
           resultText: result.content,
-          sourceLanguage: settings.sourceLanguage,
-          targetLanguage: settings.targetLanguage,
+          sourceLanguage: direction.sourceLanguage,
+          targetLanguage: direction.targetLanguage,
           serviceName: result.serviceName,
           isFavorite: false
         });
       }
     });
 
-    const aiPromise = aiEnabled ? runAiJobs(requestId, text) : Promise.resolve();
+    const aiPromise = aiEnabled ? runAiJobs(requestId, text, direction) : Promise.resolve();
     await Promise.allSettled([...servicePromises, aiPromise]);
     if (requestId === requestIdRef.current) setRunning(false);
   };
 
-  const runAiJobs = async (requestId: number, text: string) => {
+  const runAiJobs = async (requestId: number, text: string, direction: ResolvedTranslationDirection) => {
     const jobs: Promise<void>[] = [];
 
     jobs.push((async () => {
       const aiResult = await runAiTranslate({
         providerId: config.aiSettings.defaultServiceId,
         sourceText: text,
-        sourceLanguage: settings.sourceLanguage,
-        targetLanguage: settings.targetLanguage,
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage,
         scene: "translation"
       });
       const cleaned = formatAiTranslation(aiResult.content);
@@ -209,14 +211,15 @@ export function TranslateWindow() {
         name: aiModelName,
         iconText: "AI",
         content: cleaned,
+        copyText: extractNaturalTranslation(cleaned),
         ai: true
       });
       void appendHistoryEntry({
         type: "ai_translate",
         sourceText: text,
         resultText: cleaned,
-        sourceLanguage: settings.sourceLanguage,
-        targetLanguage: settings.targetLanguage,
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage,
         serviceName: aiResult.serviceName || aiModelName,
         isFavorite: false
       });
@@ -256,7 +259,7 @@ export function TranslateWindow() {
           type: "ai_reply",
           sourceText: text,
           resultText: replies,
-          sourceLanguage: settings.sourceLanguage,
+          sourceLanguage: direction.sourceLanguage,
           targetLanguage: config.aiSettings.replyTargetLanguage,
           serviceName: replyResult.serviceName || "AI 代替回复",
           isFavorite: false
@@ -268,7 +271,7 @@ export function TranslateWindow() {
               providerId: config.aiSettings.defaultServiceId,
               sourceText: firstReply,
               sourceLanguage: config.aiSettings.replyTargetLanguage,
-              targetLanguage: settings.sourceLanguage === "auto" ? "zh-CN" : settings.sourceLanguage,
+              targetLanguage: direction.sourceLanguage === "auto" ? "zh-CN" : direction.sourceLanguage,
               scene: "reply-translation"
             });
             replyTranslation = extractNaturalTranslation(translatedReply.content);

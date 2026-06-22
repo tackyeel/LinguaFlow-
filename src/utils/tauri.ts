@@ -22,6 +22,15 @@ export async function showWindow(label: string) {
   await invokeCommand("show_window", { label });
 }
 
+export async function toggleTranslatorWindow() {
+  if (!isTauriRuntime()) {
+    await showWindow("translate");
+    return;
+  }
+
+  await invokeCommand("toggle_translator_window");
+}
+
 export async function hideWindow(label?: string) {
   if (!isTauriRuntime()) {
     window.close();

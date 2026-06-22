@@ -2,8 +2,15 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { DynamicIsland } from "./DynamicIsland";
 import { DynamicIslandPanel } from "./DynamicIslandPanel";
-import { useTranslatorEngine, type TranslatorStatus } from "../../hooks/useTranslatorEngine";
-import { hideWindow, resizeDynamicIslandWindow, switchTranslatorWindowMode } from "../../utils/tauri";
+import {
+  selectExplanationForCopy,
+  selectImageTranslationForCopy,
+  selectReplyForCopy,
+  selectTranslationForCopy,
+  useTranslatorEngine,
+  type TranslatorStatus
+} from "../../hooks/useTranslatorEngine";
+import { hideWindow, listenToTauriEvent, resizeDynamicIslandWindow, switchTranslatorWindowMode } from "../../utils/tauri";
 
 type TabId = "translation" | "explanation" | "reply" | "vision";
 
@@ -14,6 +21,8 @@ export function DynamicIslandWindow() {
   const collapseTimerRef = useRef<number>();
   const hoverTimerRef = useRef<number>();
   const resizeTimerRef = useRef<number>();
+  const composingRef = useRef(false);
+  const pointerInsideRef = useRef(false);
 
   const status = useMemo<TranslatorStatus>(() => {
     if (engine.running && !engine.completed) return "translating";
@@ -46,12 +55,12 @@ export function DynamicIslandWindow() {
 
   const primaryCopyText =
     activeTab === "vision"
-      ? engine.imageTranslationText
+      ? selectImageTranslationForCopy(engine.imageTranslationText)
       : activeTab === "reply"
-        ? engine.aiReplyText
+        ? selectReplyForCopy(engine.aiReplyText, engine.settings.aiReplyCopyFormat)
         : activeTab === "explanation"
-          ? engine.aiExplanationText
-          : engine.translationText;
+          ? selectExplanationForCopy(engine.aiExplanationText)
+          : selectTranslationForCopy(engine.translationText);
 
   const switchToNormal = async () => {
     await engine.updateConfig((draft) => {
@@ -88,7 +97,10 @@ export function DynamicIslandWindow() {
     window.clearTimeout(collapseTimerRef.current);
     if (!expanded) return;
 
-    const run = () => setExpanded(false);
+    const run = () => {
+      if (composingRef.current) return;
+      setExpanded(false);
+    };
     if (delay > 0) {
       collapseTimerRef.current = window.setTimeout(run, delay);
       return;
@@ -98,7 +110,7 @@ export function DynamicIslandWindow() {
   };
 
   useEffect(() => {
-    const onBlur = () => collapseIsland();
+    const onBlur = () => collapseIsland(120);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") collapseIsland();
     };
@@ -110,12 +122,47 @@ export function DynamicIslandWindow() {
     };
   }, [expanded]);
 
+  useEffect(() => {
+    const onCompositionStart = () => {
+      composingRef.current = true;
+    };
+    const onCompositionEnd = () => {
+      composingRef.current = false;
+      if (!pointerInsideRef.current) collapseIsland(220);
+    };
+
+    document.addEventListener("compositionstart", onCompositionStart);
+    document.addEventListener("compositionend", onCompositionEnd);
+    return () => {
+      document.removeEventListener("compositionstart", onCompositionStart);
+      document.removeEventListener("compositionend", onCompositionEnd);
+    };
+  }, [expanded]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listenToTauriEvent("dynamic-island:collapse", () => {
+      window.clearTimeout(collapseTimerRef.current);
+      window.clearTimeout(hoverTimerRef.current);
+      setExpanded(false);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, []);
+
   return (
     <div className={`dynamic-island-window ${expanded ? "dynamic-island-window-expanded" : ""}`}>
       <div
         className="dynamic-island-content"
-        onMouseEnter={() => window.clearTimeout(collapseTimerRef.current)}
-        onMouseLeave={() => collapseIsland(220)}
+        onMouseEnter={() => {
+          pointerInsideRef.current = true;
+          window.clearTimeout(collapseTimerRef.current);
+        }}
+        onMouseLeave={() => {
+          pointerInsideRef.current = false;
+          collapseIsland(220);
+        }}
       >
         <DynamicIsland
           engine={engine}

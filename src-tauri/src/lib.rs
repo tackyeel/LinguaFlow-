@@ -29,6 +29,7 @@ pub fn run() {
       history::clear_history,
       screenshot::capture_screen_clip,
       window::show_window,
+      window::toggle_translator_window,
       window::hide_window,
       window::resize_dynamic_island_window,
       window::switch_translator_window_mode,

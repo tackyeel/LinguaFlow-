@@ -4,6 +4,7 @@ import { captureScreenClip, runAiImageTranslate, runAiReply, runAiTranslate } fr
 import { appendHistoryEntry } from "../utils/history";
 import { invokeCommand, isTauriRuntime, listenToTauriEvent } from "../utils/tauri";
 import { translateWithService, type ServiceTranslateResult } from "../utils/translateServices";
+import { resolveTranslationDirection, type ResolvedTranslationDirection } from "../utils/languageDirection";
 import type { AiReplyCopyFormat } from "../types/config";
 
 export type TranslatorStatus = "idle" | "focused" | "expanded" | "translating" | "success" | "error";
@@ -139,14 +140,15 @@ export function useTranslatorEngine() {
     setAiExplanationText("");
     setAiReplyText("");
 
+    const direction = resolveTranslationDirection(text, settings);
     const errors: string[] = [];
     let successCount = 0;
     const serviceJobs = enabledServices.map(async (service) => {
       const result = await translateWithService({
         service,
         sourceText: text,
-        sourceLanguage: settings.sourceLanguage,
-        targetLanguage: settings.targetLanguage
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage
       });
       if (requestId !== requestIdRef.current) return null;
       if (result.ok && result.content.trim()) {
@@ -156,8 +158,8 @@ export function useTranslatorEngine() {
           type: "translation",
           sourceText: text,
           resultText: result.content,
-          sourceLanguage: settings.sourceLanguage,
-          targetLanguage: settings.targetLanguage,
+          sourceLanguage: direction.sourceLanguage,
+          targetLanguage: direction.targetLanguage,
           serviceName: result.serviceName,
           isFavorite: false
         });
@@ -170,7 +172,7 @@ export function useTranslatorEngine() {
     const markSuccess = () => {
       successCount += 1;
     };
-    const aiJob = aiEnabled ? runAiJobs(requestId, text, markSuccess, errors, shouldRunAiReply) : Promise.resolve();
+    const aiJob = aiEnabled ? runAiJobs(requestId, text, direction, markSuccess, errors, shouldRunAiReply) : Promise.resolve();
     const [serviceSettled, aiSettled] = await Promise.all([Promise.allSettled(serviceJobs), Promise.allSettled([aiJob])]);
     if (requestId !== requestIdRef.current) return;
     setTranslationRunning(false);
@@ -197,15 +199,22 @@ export function useTranslatorEngine() {
     setCompleted(Boolean(text.trim()));
   };
 
-  const runAiJobs = async (requestId: number, text: string, markSuccess: () => void, errors: string[], shouldRunAiReply: boolean) => {
+  const runAiJobs = async (
+    requestId: number,
+    text: string,
+    direction: ResolvedTranslationDirection,
+    markSuccess: () => void,
+    errors: string[],
+    shouldRunAiReply: boolean
+  ) => {
     const jobs: Promise<void>[] = [];
 
     jobs.push((async () => {
       const aiResult = await runAiTranslate({
         providerId: config.aiSettings.defaultServiceId,
         sourceText: text,
-        sourceLanguage: settings.sourceLanguage,
-        targetLanguage: settings.targetLanguage,
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage,
         scene: "dynamic-island"
       });
       if (requestId !== requestIdRef.current) return;
@@ -221,8 +230,8 @@ export function useTranslatorEngine() {
         type: "ai_translate",
         sourceText: text,
         resultText: natural || aiResult.content,
-        sourceLanguage: settings.sourceLanguage,
-        targetLanguage: settings.targetLanguage,
+        sourceLanguage: direction.sourceLanguage,
+        targetLanguage: direction.targetLanguage,
         serviceName: aiResult.serviceName || "AI Translate",
         isFavorite: false
       });
@@ -252,7 +261,7 @@ export function useTranslatorEngine() {
           type: "ai_reply",
           sourceText: text,
           resultText: replyResult.content,
-          sourceLanguage: settings.sourceLanguage,
+          sourceLanguage: direction.sourceLanguage,
           targetLanguage: config.aiSettings.replyTargetLanguage,
           serviceName: replyResult.serviceName || "AI Reply",
           isFavorite: false
@@ -292,14 +301,15 @@ export function useTranslatorEngine() {
 
       const ocrText = screenshot.ocrText.trim();
       if (ocrText) {
+        const direction = resolveTranslationDirection(ocrText, settings);
         setImageTranslationText(
           `【识别文字】\n${ocrText}\n\n【翻译结果】\n正在翻译 OCR 文本...\n\n【备注】\n已先使用 Windows 本地 OCR 提取文字。`
         );
         const result = await runAiTranslate({
           providerId: config.aiSettings.visionServiceId || config.aiSettings.defaultServiceId,
           sourceText: ocrText,
-          sourceLanguage: settings.sourceLanguage,
-          targetLanguage: settings.targetLanguage,
+          sourceLanguage: direction.sourceLanguage,
+          targetLanguage: direction.targetLanguage,
           scene: "ocr-text"
         });
         if (requestId !== imageRequestIdRef.current) return;
@@ -315,8 +325,8 @@ export function useTranslatorEngine() {
           type: "ai_image_translate",
           sourceText: ocrText,
           resultText: translated,
-          sourceLanguage: settings.sourceLanguage,
-          targetLanguage: settings.targetLanguage,
+          sourceLanguage: direction.sourceLanguage,
+          targetLanguage: direction.targetLanguage,
           serviceName: result.serviceName || "AI OCR 翻译",
           isFavorite: false
         });
@@ -447,6 +457,25 @@ export function parseImageTranslationSections(content: string): ImageTranslation
   };
 }
 
+export function selectTranslationForCopy(content: string) {
+  const normalized = content.trim();
+  if (!normalized) return "";
+
+  const sections = splitBracketSections(normalized);
+  const firstSuccessful = sections.find((section) => section.content && !/translation failed|翻译失败/i.test(section.content));
+  return firstSuccessful?.content || sections[0]?.content || normalized;
+}
+
+export function selectExplanationForCopy(content: string) {
+  const sections = parseTranslationSections(content);
+  return sections.natural || selectTranslationForCopy(content);
+}
+
+export function selectImageTranslationForCopy(content: string) {
+  const sections = parseImageTranslationSections(content);
+  return sections.translated || sections.recognized || selectTranslationForCopy(content);
+}
+
 function extractNaturalTranslation(content: string) {
   return parseTranslationSections(content).natural;
 }
@@ -480,13 +509,22 @@ function extractFirstReply(content: string) {
   );
 }
 
-function selectReplyForCopy(content: string, format: AiReplyCopyFormat) {
+export function selectReplyForCopy(content: string, format: AiReplyCopyFormat = "replyOnly") {
   const normalized = content.trim();
   if (!normalized) return "";
   if (format === "replyWithExplanation") return normalized;
 
   const sections = parseReplySections(normalized);
   return sections.recommended || extractFirstReply(normalized);
+}
+
+function splitBracketSections(content: string) {
+  return Array.from(content.matchAll(/(?:^|\n)\s*【([^】]+)】\s*\n([\s\S]*?)(?=\n\s*【[^】]+】\s*\n|$)/g))
+    .map((match) => ({
+      title: match[1]?.trim() ?? "",
+      content: match[2]?.trim() ?? ""
+    }))
+    .filter((section) => section.content);
 }
 
 function formatServiceResult(result: ServiceTranslateResult) {

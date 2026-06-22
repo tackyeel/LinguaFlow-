@@ -1,5 +1,5 @@
 import type { HotkeyAction, HotkeyConfig } from "../types/config";
-import { isTauriRuntime, showWindow } from "./tauri";
+import { isTauriRuntime, showWindow, toggleTranslatorWindow } from "./tauri";
 
 const ACTION_BY_HOTKEY = new Map<string, HotkeyAction>();
 
@@ -52,7 +52,7 @@ function normalizeShortcut(value: string) {
 
 async function runHotkeyAction(action: HotkeyAction) {
   if (action === "inputTranslate") {
-    await showWindow("translate");
+    await toggleTranslatorWindow();
     return;
   }
 
